@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { AuthService } from '../services/AuthService';
+import  AuthService  from '../services/AuthService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -11,29 +11,29 @@ const LoginScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
+  if (!email || !password) {
+    Alert.alert('Error', 'Please fill in all fields');
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
+  
+  try {
+    const result = await AuthService.login(email, password);
     
-    try {
-      const result = await AuthService.signIn(email, password);
-      
-      if (result.success) {
-        Alert.alert('Success', 'Login successful!', [
-          { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) }
-        ]);
-      } else {
-        Alert.alert('Login Failed', result.error);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
+    if (result.success) {
+      Alert.alert('Success', 'Login successful!', [
+        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) }
+      ]);
+    } else {
+      Alert.alert('Login Failed', result.error);
     }
-  };
+  } catch (error) {
+    Alert.alert('Error', 'Something went wrong. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -75,7 +75,7 @@ const LoginScreen = ({ navigation }) => {
 
         <View style={styles.form}>
           <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-            <View style={styles.inputIcon}><Text style={styles.iconText}></Text></View>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>📧</Text></View>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               value={email}
@@ -89,7 +89,7 @@ const LoginScreen = ({ navigation }) => {
           </View>
 
           <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-            <View style={styles.inputIcon}><Text style={styles.iconText}></Text></View>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>🔒</Text></View>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               value={password}
@@ -140,7 +140,7 @@ const LoginScreen = ({ navigation }) => {
 
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.muted }]}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Signup')} disabled={loading}>
+            <TouchableOpacity onPress={() => navigation.navigate('SignUp')} disabled={loading}>
               <Text style={[styles.footerLink, { color: colors.primary }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>

@@ -1,36 +1,55 @@
-﻿import 'react-native-gesture-handler';
-import React from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator } from 'react-native';
-import AppNavigator from './src/navigation/AppNavigator';
-import { ThemeProvider } from './src/theme/ThemeContext';
-import { AuthProvider, useAuth } from './src/context/AuthContext';
+﻿import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { AuthProvider, useAuth } from './AuthContext';
+import SignupScreen from './src/screens/SignupScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
 
-// Loading screen component
-const LoadingScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' }}>
-    <ActivityIndicator size="large" color="#1f7a4f" />
-  </View>
-);
+const Stack = createStackNavigator();
 
-// App content with auth state
-const AppContent = () => {
-  const { loading } = useAuth();
+function AppNavigator() {
+  const { currentUser } = useAuth();
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  return <AppNavigator />;
-};
+  return (
+    <NavigationContainer>
+     <Stack.Navigator>
+  {currentUser ? (
+    <Stack.Screen 
+      name="Home" 
+      component={HomeScreen} 
+      options={{ 
+        headerShown: true, // ← Add this line
+        title: 'Home',     // ← Optional: Add a title
+        headerStyle: {
+          backgroundColor: '#1f7a4f', // Match your theme
+        },
+        headerTintColor: '#fff',
+      }}
+    />
+  ) : (
+    <>
+      <Stack.Screen 
+        name="Login" 
+        component={LoginScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="SignUp" 
+        component={SignupScreen} 
+        options={{ headerShown: false }}
+      />
+    </>
+  )}
+</Stack.Navigator>
+    </NavigationContainer>
+  );
+}
 
 export default function App() {
   return (
     <AuthProvider>
-      <ThemeProvider>
-        <AppContent />
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <AppNavigator />
     </AuthProvider>
   );
 }

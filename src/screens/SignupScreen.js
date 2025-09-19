@@ -1,11 +1,13 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { AuthService } from '../services/AuthService';
+import  AuthService  from '../services/AuthService';
 
 const SignupScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
-    fullName: '',
+    First_Name: '',
+    Last_Name: '',
+    contact: '',
     email: '',
     password: '',
   });
@@ -18,36 +20,41 @@ const SignupScreen = ({ navigation }) => {
   };
 
   const handleSignup = async () => {
-    const { fullName, email, password } = formData;
+    const { First_Name, Last_Name, contact, email, password } = formData;
 
-    if (!fullName || !email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
+    // Fixed validation logic (removed incorrect OR conditions)
+    if (!First_Name || !Last_Name || !contact || !email || !password) {
+    Alert.alert('Error', 'Please fill in all fields');
+    return;
+  }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
-      return;
-    }
+  if (password.length < 12) {
+    Alert.alert('Error', 'Password must be at least 12 characters long');
+    return;
+  }
 
     setLoading(true);
 
     try {
-      const result = await AuthService.register(email, password, fullName);
-      
-      if (result.success) {
-        Alert.alert('Success', 'Account created successfully!', [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
-        ]);
-      } else {
-        Alert.alert('Registration Failed', result.error);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
+    const result = await AuthService.register(email, password, First_Name, Last_Name, contact);
+    
+    if (result.success) {
+      Alert.alert('Success', 'Account created successfully!', [
+        { text: 'OK', 
+          onPress: () => navigation.navigate('Login', { email: formData.email }) }
+      ]);
+    } else {
+      // Show the actual error from Firebase
+      Alert.alert('Registration Failed', result.error || 'Unknown error occurred');
     }
-  };
+  } catch (error) {
+    // Show the actual error details
+    console.error('Signup error:', error);
+    Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     if (!formData.email) {
@@ -88,20 +95,49 @@ const SignupScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.form}>
+          {/* First Name Input */}
           <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-            <View style={styles.inputIcon}><Text style={styles.iconText}></Text></View>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>👤</Text></View>
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              value={formData.fullName}
-              onChangeText={(v) => handleInputChange('fullName', v)}
-              placeholder="Full Name"
+              value={formData.First_Name}
+              onChangeText={(v) => handleInputChange('First_Name', v)}
+              placeholder="First Name"
               placeholderTextColor={colors.muted}
               editable={!loading}
             />
           </View>
 
+          {/* Last Name Input */}
           <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-            <View style={styles.inputIcon}><Text style={styles.iconText}></Text></View>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>👤</Text></View>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              value={formData.Last_Name}
+              onChangeText={(v) => handleInputChange('Last_Name', v)}
+              placeholder="Last Name"
+              placeholderTextColor={colors.muted}
+              editable={!loading}
+            />
+          </View>
+
+          {/* Contact Input */}
+          <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>📞</Text></View>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              value={formData.contact}
+              onChangeText={(v) => handleInputChange('contact', v)}
+              placeholder="+63 Contact Number"
+              keyboardType="phone-pad"
+              placeholderTextColor={colors.muted}
+              editable={!loading}
+            />
+          </View>
+
+          {/* Email Input */}
+          <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>📧</Text></View>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               value={formData.email}
@@ -114,13 +150,14 @@ const SignupScreen = ({ navigation }) => {
             />
           </View>
 
+          {/* Password Input */}
           <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-            <View style={styles.inputIcon}><Text style={styles.iconText}></Text></View>
+            <View style={styles.inputIcon}><Text style={styles.iconText}>🔒</Text></View>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               value={formData.password}
               onChangeText={(v) => handleInputChange('password', v)}
-              placeholder="Password (min 6 characters)"
+              placeholder="Password (min 12 characters)"
               secureTextEntry
               placeholderTextColor={colors.muted}
               editable={!loading}
@@ -185,7 +222,19 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 4 },
   subtitle: { fontSize: 16, color: '#e8f5e9' },
   form: { paddingHorizontal: 16, marginTop: 20 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, paddingHorizontal: 12, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#ffffff', 
+    borderRadius: 12, 
+    paddingHorizontal: 12, 
+    marginBottom: 12, 
+    elevation: 2, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 2 
+  },
   inputIcon: { marginRight: 8 },
   iconText: { fontSize: 16 },
   input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#2e7d32' },
