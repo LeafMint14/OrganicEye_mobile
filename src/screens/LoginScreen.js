@@ -22,9 +22,7 @@ const LoginScreen = ({ navigation }) => {
     const result = await AuthService.login(email, password);
     
     if (result.success) {
-      Alert.alert('Success', 'Login successful!', [
-        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Home' }) }
-      ]);
+      Alert.alert('Success', 'Login successful!');
     } else {
       Alert.alert('Login Failed', result.error);
     }
@@ -140,7 +138,7 @@ const LoginScreen = ({ navigation }) => {
 
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.muted }]}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SignUp')} disabled={loading}>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')} disabled={loading}>
               <Text style={[styles.footerLink, { color: colors.primary }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>

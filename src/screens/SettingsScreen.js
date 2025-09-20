@@ -1,20 +1,59 @@
-﻿import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Image, ImageBackground } from 'react-native';
+﻿import React, { useState, useEffect } from 'react'; // ADD useEffect import
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import UserService from '../services/UserService';
 
 const SettingsScreen = ({ navigation }) => {
   const [notifications, setNotifications] = useState(true);
   const [autoDetection, setAutoDetection] = useState(false);
   const [dataSync, setDataSync] = useState(true);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const { theme, colors, toggleTheme } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
 
-  // Mock profile data - in real app, get from user context
+ useEffect(() => {
+  const fetchUserData = async () => {
+    console.log('useEffect triggered, user:', user);
+    
+    if (user?.uid) {
+      try {
+        console.log('Fetching data for UID:', user.uid);
+        setLoading(true);
+        
+        const result = await UserService.getUserData(user.uid);
+        console.log('UserService result:', result);
+        
+        if (result.success) {
+          console.log('User data received:', result.userData);
+          setUserData(result.userData);
+        } else {
+          console.log('UserService error:', result.error);
+          Alert.alert('Error', result.error);
+        }
+      } catch (error) {
+        console.error('Error in fetchUserData:', error);
+        Alert.alert('Error', 'Failed to load user data');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      console.log('No user UID available or user is null');
+      setLoading(false);
+    }
+  };
+
+  fetchUserData();
+}, [user]);
+
   const profile = {
-    name: user?.displayName || 'Juan Dela Cruz',
-    email: user?.email || 'juan@example.com',
-    role: 'Farmer',
+    name: userData?.First_Name && userData?.Last_Name 
+      ? `${userData.First_Name} ${userData.Last_Name}`
+      : user?.displayName || 'User Name',
+    email: user?.email || 'email@example.com',
+    contact: userData?.contact || 'Not provided',
+    role: userData?.role || 'Farmer',
     avatar: require('../../assets/logo.png'),
   };
 
@@ -97,27 +136,52 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive', 
-          onPress: async () => {
-            try {
-              await signOut();
-              // Navigation will be handled automatically by AppNavigator
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout. Please try again.');
+  Alert.alert(
+    'Logout',
+    'Are you sure you want to logout?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Logout', 
+        style: 'destructive', 
+        onPress: async () => {
+          try {
+            // Use the logout function from auth context, not signOut directly
+            const result = await logout(); // This calls AuthService.logout()
+            
+            if (result.success) {
+              // Logout successful - navigation will happen automatically
+              console.log('Logout successful');
+            } else {
+              Alert.alert('Error', result.error || 'Failed to logout');
             }
+          } catch (error) {
+            console.error('Logout error:', error);
+            Alert.alert('Error', 'Failed to logout. Please try again.');
           }
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
+  // Loading state should return early
+  if (loading) {
+    return (
+      <ImageBackground
+        source={require('../../assets/backgroundimage.png')}
+        style={styles.bg}
+        resizeMode="cover"
+      >
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading user data...</Text>
+        </View>
+      </ImageBackground>
+    );
+  }
+
+  // Main return should be outside the if condition
   return (
     <ImageBackground
       source={require('../../assets/backgroundimage.png')}
@@ -131,14 +195,44 @@ const SettingsScreen = ({ navigation }) => {
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: colors.text }]}>{profile.name}</Text>
             <Text style={[styles.profileEmail, { color: colors.muted }]}>{profile.email}</Text>
+            <Text style={[styles.profileContact, { color: colors.muted }]}>Contact: {profile.contact}</Text>
             <View style={[styles.roleBadge, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)' }]}>
-              <Text style={styles.roleBadgeDot}></Text>
+              <Text style={styles.roleBadgeDot}>•</Text>
               <Text style={[styles.roleBadgeText, { color: colors.text }]}>{profile.role}</Text>
             </View>
           </View>
           <TouchableOpacity style={[styles.editBtn, { backgroundColor: colors.primary }]} onPress={() => Alert.alert('Edit Profile', 'Edit screen would open here')}> 
             <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Add user details section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Details</Text>
+          <View style={[styles.optionsContainer, { backgroundColor: colors.card }]}> 
+            <View style={styles.detailItem}>
+              <Text style={[styles.detailLabel, { color: colors.muted }]}>First Name</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{userData?.First_Name || 'Not set'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={[styles.detailLabel, { color: colors.muted }]}>Last Name</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{userData?.Last_Name || 'Not set'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={[styles.detailLabel, { color: colors.muted }]}>Email</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{user?.email || 'Not set'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={[styles.detailLabel, { color: colors.muted }]}>Contact</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{userData?.contact || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={[styles.detailLabel, { color: colors.muted }]}>Member Since</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>
+                {userData?.createdAt ? new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Preferences with Dark mode */}
@@ -215,6 +309,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,6 +344,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#e8f5e9',
   },
+  profileContact: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#e8f5e9',
+  },
   roleBadge: {
     marginTop: 6,
     flexDirection: 'row',
@@ -254,6 +362,7 @@ const styles = StyleSheet.create({
   roleBadgeDot: {
     color: '#F6C453',
     marginRight: 6,
+    fontSize: 16,
   },
   roleBadgeText: {
     color: '#ffffff',
@@ -270,10 +379,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
   },
-  toggleSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
   section: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -283,6 +388,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 15,
+  },
+  detailItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f2f6',
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  toggleSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
   },
   toggleItem: {
     backgroundColor: '#fff',

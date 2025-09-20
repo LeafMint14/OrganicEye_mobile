@@ -1,89 +1,62 @@
-﻿// // Authentication Context for managing user state
-// import React, { createContext, useContext, useEffect, useState } from 'react';
-// import { AuthService } from '../services/AuthService';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import  AuthService  from '../services/AuthService';
 
-// const AuthContext = createContext({
-//   user: null,
-//   loading: true,
-//   signIn: () => {},
-//   signUp: () => {},
-//   signOut: () => {},
-//   resetPassword: () => {},
-// });
+const AuthContext = createContext();
 
-// export const AuthProvider = ({ children }) => {
-//   const [user, setUser] = useState(null);
-//   const [loading, setLoading] = useState(true);
+// Custom hook to use the auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
-//   useEffect(() => {
-//     // Listen to authentication state changes
-//     const unsubscribe = AuthService.onAuthStateChanged((user) => {
-//       setUser(user);
-//       setLoading(false);
-//     });
+export const AuthProvider = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-//     return unsubscribe;
-//   }, []);
+  // Signup function
+  const signup = async (email, password, First_Name, Last_Name, contact) => {
+    return await AuthService.register(email, password, First_Name, Last_Name, contact);
+  };
 
-//   const signIn = async (email, password) => {
-//     setLoading(true);
-//     try {
-//       const result = await AuthService.signIn(email, password);
-//       return result;
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
+  // Login function
+  const login = async (email, password) => {
+    return await AuthService.login(email, password);
+  };
 
-//   const signUp = async (email, password, fullName) => {
-//     setLoading(true);
-//     try {
-//       const result = await AuthService.register(email, password, fullName);
-//       return result;
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
+  // Logout function
+  const logout = async () => {
+    return await AuthService.logout();
+  };
 
-//   const signOut = async () => {
-//     setLoading(true);
-//     try {
-//       const result = await AuthService.signOut();
-//       return result;
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
+  // Reset password function
+  const resetPassword = async (email) => {
+    return await AuthService.resetPassword(email);
+  };
 
-//   const resetPassword = async (email) => {
-//     try {
-//       const result = await AuthService.resetPassword(email);
-//       return result;
-//     } catch (error) {
-//       return { success: false, error: error.message };
-//     }
-//   };
+  useEffect(() => {
+    const unsubscribe = AuthService.onAuthStateChange((user) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
 
-//   const value = {
-//     user,
-//     loading,
-//     signIn,
-//     signUp,
-//     signOut,
-//     resetPassword,
-//   };
+    return unsubscribe;
+  }, []);
 
-//   return (
-//     <AuthContext.Provider value={value}>
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// };
+  const value = {
+    currentUser,
+    signup,
+    login,
+    logout,
+    resetPassword,
+    isAuthenticated: !!currentUser
+  };
 
-// export const useAuth = () => {
-//   const context = useContext(AuthContext);
-//   if (!context) {
-//     throw new Error('useAuth must be used within an AuthProvider');
-//   }
-//   return context;
-// };
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+};

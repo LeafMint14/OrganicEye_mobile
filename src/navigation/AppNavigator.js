@@ -43,7 +43,7 @@ function MainTabNavigator() {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size, color }}></Text>
+            <Text style={{ fontSize: size, color }}>🏠</Text>
           ),
         }}
       />
@@ -52,7 +52,7 @@ function MainTabNavigator() {
         component={InsectScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size, color }}></Text>
+            <Text style={{ fontSize: size, color }}>🐛</Text>
           ),
         }}
       />
@@ -61,7 +61,7 @@ function MainTabNavigator() {
         component={CropScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size, color }}></Text>
+            <Text style={{ fontSize: size, color }}>🌱</Text>
           ),
         }}
       />
@@ -70,7 +70,7 @@ function MainTabNavigator() {
         component={AnalyticsScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size, color }}></Text>
+            <Text style={{ fontSize: size, color }}>📊</Text>
           ),
         }}
       />
@@ -79,7 +79,7 @@ function MainTabNavigator() {
         component={SettingsScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size, color }}></Text>
+            <Text style={{ fontSize: size, color }}>⚙️</Text>
           ),
         }}
       />
@@ -89,25 +89,25 @@ function MainTabNavigator() {
 
 // Main App Navigator
 export default function AppNavigator() {
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
 
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={user ? "Main" : "Welcome"}
+        initialRouteName={currentUser ? "Main" : "Welcome"}
         screenOptions={{
           headerShown: false,
         }}
       >
-        {user ? (
-          // User is signed in - show main app
+        {currentUser ? (
+          // currentUser is signed in - show main app
           <>
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="InsectDetails" component={InsectDetailsScreen} />
             <Stack.Screen name="CropDetails" component={CropDetailsScreen} />
           </>
         ) : (
-          // User is not signed in - show auth screens
+          // currentUser is not signed in - show auth screens
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
@@ -118,3 +118,4 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
