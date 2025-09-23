@@ -37,7 +37,7 @@ const WelcomeScreen = ({ navigation }) => {
           style={[styles.secondaryButton, { borderColor: colors.primary }]}
           onPress={() => navigation.navigate('Signup')}
         >
-          <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Create An Account</Text>
+          <Text style={[styles.secondaryButtonText, { color: '#FFFFFF',fontWeight: 'bold'}]}>Create An Account</Text>
         </TouchableOpacity>
       </View>
     </ImageBackground>

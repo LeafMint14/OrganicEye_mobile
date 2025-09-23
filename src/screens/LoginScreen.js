@@ -68,7 +68,7 @@ const LoginScreen = ({ navigation }) => {
 
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Sign In</Text>
-          <Text style={[styles.subtitle, { color: colors.muted }]}>Welcome back to your account</Text>
+          <Text style={[styles.subtitle, { color: '#000000ff',  fontWeight: 'bold' }]}>Welcome back to your account</Text>
         </View>
 
         <View style={styles.form}>
@@ -105,7 +105,7 @@ const LoginScreen = ({ navigation }) => {
               <Text style={[styles.rememberText, { color: colors.text }]}>Remember me</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleForgotPassword} disabled={loading}>
-              <Text style={[styles.forgotText, { color: colors.primary }]}>Forget Password?</Text>
+              <Text style={[styles.forgotText, { color: '#FFFFFF',  fontWeight: 'bold'  }]}>Forget Password?</Text>
             </TouchableOpacity>
           </View>
 
@@ -122,24 +122,24 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           <View style={styles.dividerRow}>
-            <View style={[styles.divider, { backgroundColor: colors.muted }]} />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>Or Continue With</Text>
-            <View style={[styles.divider, { backgroundColor: colors.muted }]} />
+            <View style={[styles.divider, { backgroundColor: '#FFFFFF' }]} />
+            <Text style={[styles.dividerText, { color: '#FFFFFF',  fontWeight: 'bold' }]}>Or Continue With</Text>
+            <View style={[styles.divider, { backgroundColor: '#FFFFFF' }]} />
           </View>
 
           <View style={styles.socialRow}>
-            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: colors.card }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: colors.primary }]}>G</Text>
+            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#DB4437' }]} disabled={loading}>
+              <Text style={[styles.socialText, { color: '#2bff00ff',  fontWeight: 'bold' }]}>G</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: '#fff' }]}>f</Text>
-            </TouchableOpacity>
+            {/* <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
+              <Text style={[styles.socialText, { color: '#f6fa00ff' }]}>f</Text>
+            </TouchableOpacity> */}
           </View>
 
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: colors.muted }]}>Don't have an account? </Text>
+            <Text style={[styles.footerText, { color: '#1eff00ff',  fontWeight: 'bold' }]}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Signup')} disabled={loading}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>Sign Up</Text>
+              <Text style={[styles.footerLink, { color: '#FFFFFF',  fontWeight: 'bold' }]}>Sign Up</Text>
             </TouchableOpacity>
           </View>
         </View>
