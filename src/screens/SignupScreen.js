@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import  AuthService  from '../services/AuthService';
+import { useAuth } from '../context/AuthContext';
 
 const SignupScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -14,6 +14,7 @@ const SignupScreen = ({ navigation }) => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const { theme, colors } = useTheme();
+  const { signup } = useAuth();
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -36,18 +37,18 @@ const SignupScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-    const result = await AuthService.register(email, password, First_Name, Last_Name, contact);
-    
-    if (result.success) {
-      Alert.alert('Success', 'Account created successfully!', [
-        { text: 'OK', 
-          onPress: () => navigation.navigate('Login', { email: formData.email }) }
-      ]);
-    } else {
-      // Show the actual error from Firebase
-      Alert.alert('Registration Failed', result.error || 'Unknown error occurred');
-    }
-  } catch (error) {
+      const result = await signup(email, password, First_Name, Last_Name, contact);
+      
+      if (result.success) {
+        Alert.alert('Success', 'Account created successfully!', [
+          { text: 'OK', 
+            onPress: () => navigation.navigate('Login', { email: formData.email }) }
+        ]);
+      } else {
+        // Show the actual error from Firebase
+        Alert.alert('Registration Failed', result.error || 'Unknown error occurred');
+      }
+    } catch (error) {
     // Show the actual error details
     console.error('Signup error:', error);
     Alert.alert('Error', error.message || 'Something went wrong. Please try again.');

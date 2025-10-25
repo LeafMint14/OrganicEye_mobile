@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import  AuthService  from '../services/AuthService';
+import { useAuth } from '../context/AuthContext';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -9,29 +9,31 @@ const LoginScreen = ({ navigation }) => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const { theme, colors } = useTheme();
+  const { login, resetPassword } = useAuth();
 
   const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert('Error', 'Please fill in all fields');
-    return;
-  }
-
-  setLoading(true);
-  
-  try {
-    const result = await AuthService.login(email, password);
-    
-    if (result.success) {
-      Alert.alert('Success', 'Login successful!');
-    } else {
-      Alert.alert('Login Failed', result.error);
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
     }
-  } catch (error) {
-    Alert.alert('Error', 'Something went wrong. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+
+    setLoading(true);
+    
+    try {
+      const result = await login(email, password);
+      
+      if (result.success) {
+        Alert.alert('Success', 'Login successful!');
+        // Navigation will happen automatically due to AuthContext state change
+      } else {
+        Alert.alert('Login Failed', result.error);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -40,7 +42,7 @@ const LoginScreen = ({ navigation }) => {
     }
 
     try {
-      const result = await AuthService.resetPassword(email);
+      const result = await resetPassword(email);
       if (result.success) {
         Alert.alert('Password Reset', 'Password reset email sent! Check your inbox.');
       } else {

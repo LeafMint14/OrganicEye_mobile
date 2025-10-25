@@ -6,11 +6,11 @@ const CropScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
 
   const items = [
-    { id: 1, name: 'Tomato', confidence: 85, img: require('../../assets/petchay.jpg') },
-    { id: 2, name: 'Corn', confidence: 92, img: require('../../assets/petchay.jpg') },
-    { id: 3, name: 'Wheat', confidence: 78, img: require('../../assets/petchay.jpg') },
-    { id: 4, name: 'Rice', confidence: 88, img: require('../../assets/petchay.jpg') },
-    { id: 5, name: 'Soybean', confidence: 90, img: require('../../assets/petchay.jpg') },
+    { id: 1, name: 'Pechay', confidence: 85, img: require('../../assets/petchay.jpg') },
+    { id: 2, name: 'Pechay', confidence: 92, img: require('../../assets/petchay.jpg') },
+    { id: 3, name: 'Pechay', confidence: 78, img: require('../../assets/petchay.jpg') },
+    { id: 4, name: 'Pechay', confidence: 88, img: require('../../assets/petchay.jpg') },
+    { id: 5, name: 'Pechay', confidence: 90, img: require('../../assets/petchay.jpg') },
   ];
 
   return (

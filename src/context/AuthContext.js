@@ -13,7 +13,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Signup function
@@ -23,7 +23,10 @@ export const AuthProvider = ({ children }) => {
 
   // Login function
   const login = async (email, password) => {
-    return await AuthService.login(email, password);
+    console.log('AuthContext: Login attempt for:', email);
+    const result = await AuthService.login(email, password);
+    console.log('AuthContext: Login result:', result.success ? 'success' : 'failed');
+    return result;
   };
 
   // Logout function
@@ -37,8 +40,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    console.log('AuthContext: Setting up auth state listener');
     const unsubscribe = AuthService.onAuthStateChange((user) => {
-      setCurrentUser(user);
+      console.log('AuthContext: Auth state changed, user:', user ? user.email : 'null');
+      setUser(user);
       setLoading(false);
     });
 
@@ -46,12 +51,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const value = {
-    currentUser,
+    user,
+    loading,
     signup,
     login,
     logout,
     resetPassword,
-    isAuthenticated: !!currentUser
+    isAuthenticated: !!user
   };
 
   return (

@@ -71,41 +71,28 @@ class AuthService {
   }
 
   // Logout
-  // static async logout() {
-  //   try {
-  //     await signOut(auth);
-  //     return { success: true };
-  //   } catch (error) {
-  //     return {
-  //       success: false,
-  //       error: this.getErrorMessage(error.code)
-  //     };
-  //   }
-  // }
-
-  // AuthService.js - update the logout method
-static async logout() {
-  try {
-    console.log('Attempting logout...');
-    console.log('Current user before logout:', auth.currentUser?.email);
-    
-    await signOut(auth);
-    
-    console.log('Logout successful');
-    console.log('Current user after logout:', auth.currentUser);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Logout error details:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
-    
-    return {
-      success: false,
-      error: this.getErrorMessage(error.code)
-    };
+  static async logout() {
+    try {
+      console.log('Attempting logout...');
+      console.log('Current user before logout:', auth.currentUser?.email);
+      
+      await signOut(auth);
+      
+      console.log('Logout successful');
+      console.log('Current user after logout:', auth.currentUser);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Logout error details:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      return {
+        success: false,
+        error: this.getErrorMessage(error.code)
+      };
+    }
   }
-}
 
   // Get current user
   static getCurrentUser() {

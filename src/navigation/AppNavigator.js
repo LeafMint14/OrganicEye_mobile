@@ -2,7 +2,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Text, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
 // Import screens
@@ -16,6 +16,10 @@ import CropDetailsScreen from '../screens/CropDetailsScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import InsectDetailsScreen from '../screens/InsectDetailsScreen';
+import ProfileEditScreen from '../screens/ProfileEditScreen';
+import PasswordChangeScreen from '../screens/PasswordChangeScreen';
+import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
+import DetectionSettingsScreen from '../screens/DetectionSettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -89,22 +93,39 @@ function MainTabNavigator() {
 
 // Main App Navigator
 export default function AppNavigator() {
-  const { currentUser } = useAuth();
+  const { user, loading } = useAuth();
+  
+  console.log('AppNavigator: Current user:', user ? user.email : 'null');
+  console.log('AppNavigator: Loading:', loading);
+
+  // Show loading screen while checking auth state
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1f7a4f" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={currentUser ? "Main" : "Welcome"}
+        initialRouteName={user ? "Main" : "Welcome"}
         screenOptions={{
           headerShown: false,
         }}
       >
-        {currentUser ? (
+        {user ? (
           // currentUser is signed in - show main app
           <>
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="InsectDetails" component={InsectDetailsScreen} />
             <Stack.Screen name="CropDetails" component={CropDetailsScreen} />
+            <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
+            <Stack.Screen name="PasswordChange" component={PasswordChangeScreen} />
+            <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+            <Stack.Screen name="DetectionSettings" component={DetectionSettingsScreen} />
           </>
         ) : (
           // currentUser is not signed in - show auth screens
@@ -118,4 +139,19 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#1f7a4f',
+    fontWeight: '500',
+  },
+});
 

@@ -4,30 +4,7 @@ import { db } from '../../firebase';
 
 class UserService {
   // Get user data from Firestore
-//   static async getUserData(uid) {
-//     try {
-//       const userDoc = await getDoc(doc(db, "users", uid));
-//       if (userDoc.exists()) {
-//         return {
-//           success: true,
-//           userData: userDoc.data()
-//         };
-//       } else {
-//         return {
-//           success: false,
-//           error: 'User data not found'
-//         };
-//       }
-//     } catch (error) {
-//       console.error('Error getting user data:', error);
-//       return {
-//         success: false,
-//         error: 'Failed to fetch user data'
-//       };
-//     }
-//   }
-
-static async getUserData(uid) {
+  static async getUserData(uid) {
   try {
     console.log('Fetching user data from Firestore for UID:', uid);
     
