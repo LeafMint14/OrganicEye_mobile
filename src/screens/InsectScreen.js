@@ -1,17 +1,64 @@
-﻿import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, ImageBackground } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, 
+  Image, ScrollView, ImageBackground, ActivityIndicator // <-- MODIFIED: Added ActivityIndicator
+} from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+
+// --- NEW IMPORTS ---
+// Make sure this path to your firebase config is correct!
+import { db } from '../../firebase'; 
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+// Import the filter list from your new config file
+import { INSECT_LABELS } from '../config/LabelMap'; 
+// --- END NEW IMPORTS ---
+
+
 
 const InsectScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
 
-  const items = [
-    { id: 1, name: 'Aphid', confidence: 80, img: require('../../assets/aphids.jpg') },
-    { id: 2, name: 'Aphid', confidence: 80, img: require('../../assets/aphids.jpg') },
-    { id: 3, name: 'Aphid', confidence: 80, img: require('../../assets/aphids.jpg') },
-    { id: 4, name: 'Aphid', confidence: 80, img: require('../../assets/aphids.jpg') },
-    { id: 5, name: 'Aphid', confidence: 80, img: require('../../assets/aphids.jpg') },
-  ];
+ // --- NEW: Create dynamic state for items and loading ---
+  const [items, setItems] = useState([]); // Start with an empty list
+  const [loading, setLoading] = useState(true); // To show a spinner
+  // --- END NEW STATE ---
+
+  // --- NEW: Add Firebase listener hook ---
+  useEffect(() => {
+    // 1. Create the query
+    const q = query(
+      collection(db, "detections"), // Get the "detections" collection
+      where("detection", "in", INSECT_LABELS), // Filter to ONLY show items in our INSECT_LABELS list
+      orderBy("timestamp", "desc") // Show the newest ones first
+    );
+
+    // 2. Set up the real-time listener
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const detectionsData = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        // Only add if it has a valid image URL from Cloudinary
+        if (data.imageUrl) { 
+          detectionsData.push({
+            id: doc.id,
+            name: data.detection,
+            confidence: Math.round(data.confidence * 100), // Format for display
+            img: { uri: data.imageUrl }, // Load image from Cloudinary URL
+            timestamp: data.timestamp, // Pass along for details screen
+          });
+        }
+      });
+      setItems(detectionsData); // Update the list with data from Firebase
+      setLoading(false); // Stop the loading spinner
+    });
+
+    // 3. Clean up the listener when the screen is closed
+    return () => unsubscribe();
+  }, []); // The empty array [] means this runs once when the screen loads
+  // --- END FIREBASE LISTENER ---
+
+
 
   return (
     <ImageBackground
@@ -33,22 +80,36 @@ const InsectScreen = ({ navigation }) => {
         <Text style={styles.bug}></Text>
       </View>
 
+     {/* --- MODIFIED: This section now shows a loader or the list --- */}
       <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-        <ScrollView contentContainerStyle={{ paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
-          {items.map(item => (
-            <View key={item.id} style={[styles.card, { backgroundColor: colors.bg }]}>
-              <Image source={item.img} style={styles.cardImage} resizeMode="cover" />
-              <View style={styles.cardInfo}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
-                <Text style={[styles.cardSub, { color: colors.muted }]}>{item.confidence}% confidence</Text>
+        {loading ? (
+          // If loading, show a spinner
+          <ActivityIndicator style={{ marginTop: 50 }} size="large" color={colors.primary} />
+        ) : items.length === 0 ? (
+          // If no items, show a message
+          <Text style={[styles.cardTitle, { color: colors.text, textAlign: 'center', marginTop: 50 }]}>
+            No insect data found.
+          </Text>
+        ) : (
+          // Otherwise, show the list of detections
+          <ScrollView contentContainerStyle={{ paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
+            {items.map(item => (
+              <View key={item.id} style={[styles.card, { backgroundColor: colors.bg }]}>
+                {/* Image 'source' now correctly uses the 'img' object from our state */}
+                <Image source={item.img} style={styles.cardImage} resizeMode="cover" />
+                <View style={styles.cardInfo}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
+                  <Text style={[styles.cardSub, { color: colors.muted }]}>{item.confidence}% confidence</Text>
+                </View>
+                <TouchableOpacity style={[styles.viewPill, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('InsectDetails', { item })}>
+                  <Text style={styles.viewPillText}>VIEW</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={[styles.viewPill, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('InsectDetails', { item })}>
-                <Text style={styles.viewPillText}>VIEW</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        )}
       </View>
+      {/* --- END OF MODIFICATION --- */}
     </ImageBackground>
   );
 };

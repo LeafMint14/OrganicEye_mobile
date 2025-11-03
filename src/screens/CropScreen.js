@@ -1,17 +1,75 @@
-﻿import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, ImageBackground } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, 
+  Image, ScrollView, ImageBackground, ActivityIndicator // <-- MODIFIED: Added ActivityIndicator
+} from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+
+// --- NEW IMPORTS ---
+// Make sure this path to your firebase config is correct!
+// It might be './firebaseConfig' or '../firebaseConfig' depending on your structure
+import { db } from '../../firebase'; 
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+// Import the filter list from your new config file
+import { CROP_LABELS } from '../config/LabelMap'; 
+// --- END NEW IMPORTS ---
 
 const CropScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
 
-  const items = [
-    { id: 1, name: 'Pechay', confidence: 85, img: require('../../assets/petchay.jpg') },
-    { id: 2, name: 'Pechay', confidence: 92, img: require('../../assets/petchay.jpg') },
-    { id: 3, name: 'Pechay', confidence: 78, img: require('../../assets/petchay.jpg') },
-    { id: 4, name: 'Pechay', confidence: 88, img: require('../../assets/petchay.jpg') },
-    { id: 5, name: 'Pechay', confidence: 90, img: require('../../assets/petchay.jpg') },
-  ];
+  // --- NEW: Create dynamic state for items and loading ---
+  const [items, setItems] = useState([]); // Start with an empty list
+  const [loading, setLoading] = useState(true); // To show a spinner
+  // --- END NEW STATE ---
+
+  // --- NEW: Add Firebase listener hook ---
+  useEffect(() => {
+    // 1. Create the query
+    const q = query(
+      collection(db, "detections"), // Get the "detections" collection
+      where("detection", "in", CROP_LABELS), // Filter to ONLY show items in our CROP_LABELS list
+      orderBy("timestamp", "desc") // Show the newest ones first
+    );
+
+    // 2. Set up the real-time listener
+    // This is inside your useEffect hook...
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const detectionsData = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        if (data.imageUrl) {
+          
+          // --- HERE IS YOUR NEW ALGORITHM ---
+          let status = 'UNKNOWN';
+          if (data.detection === 'Healthy') {
+            status = 'HEALTHY';
+          } else if (CROP_LABELS.includes(data.detection)) {
+            // If the label is in CROP_LABELS but NOT 'Healthy', it's unhealthy.
+            status = 'UNHEALTHY';
+          }
+          // --- END OF ALGORITHM ---
+
+          detectionsData.push({
+            id: doc.id,
+            name: data.detection, // The specific label (e.g., "Wilting")
+            confidence: Math.round(data.confidence * 100), 
+            img: { uri: data.imageUrl }, 
+            timestamp: data.timestamp,
+            status: status // <-- We add the new status field here
+          });
+        }
+      });
+      setItems(detectionsData); 
+      setLoading(false);
+    });
+// ...
+
+    // 3. Clean up the listener when the screen is closed
+    return () => unsubscribe();
+  }, []); // The empty array [] means this runs once when the screen loads
+  // --- END FIREBASE LISTENER ---
+
 
   return (
     <ImageBackground
@@ -33,22 +91,47 @@ const CropScreen = ({ navigation }) => {
         <Text style={styles.crop}></Text>
       </View>
 
+      {/* --- MODIFIED: This section now shows a loader or the list --- */}
       <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-        <ScrollView contentContainerStyle={{ paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
-          {items.map(item => (
-            <View key={item.id} style={[styles.card, { backgroundColor: colors.bg }]}>
-              <Image source={item.img} style={styles.cardImage} resizeMode="cover" />
-              <View style={styles.cardInfo}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
-                <Text style={[styles.cardSub, { color: colors.muted }]}>{item.confidence}% confidence</Text>
+        {loading ? (
+          // If loading, show a spinner
+          <ActivityIndicator style={{ marginTop: 50 }} size="large" color={colors.primary} />
+        ) : items.length === 0 ? (
+          // If no items, show a message
+          <Text style={[styles.cardTitle, { color: colors.text, textAlign: 'center', marginTop: 50 }]}>
+            No crop data found.
+          </Text>
+        ) : (
+          // Otherwise, show the list of detections
+        // This is in your return() section...
+          <ScrollView contentContainerStyle={{ paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
+            {items.map(item => (
+              <View key={item.id} style={[styles.card, { backgroundColor: colors.bg }]}>
+                <Image source={item.img} style={styles.cardImage} resizeMode="cover" />
+                <View style={styles.cardInfo}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
+                  
+                  {/* --- NEW STATUS TEXT --- */}
+                  <Text style={{ 
+                    fontWeight: 'bold', 
+                    color: item.status === 'HEALTHY' ? 'green' : 'red' 
+                  }}>
+                    Status: {item.status}
+                  </Text>
+                  {/* --- END NEW STATUS --- */}
+
+                  <Text style={[styles.cardSub, { color: colors.muted }]}>{item.confidence}% confidence</Text>
+                </View>
+                <TouchableOpacity style={[styles.viewPill, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('CropDetails', { item })}>
+                  <Text style={styles.viewPillText}>VIEW</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={[styles.viewPill, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('CropDetails', { item })}>
-                <Text style={styles.viewPillText}>VIEW</Text>
-          </TouchableOpacity>
-        </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+// ...
+        )}
       </View>
+      {/* --- END OF MODIFICATION --- */}
     </ImageBackground>
   );
 };

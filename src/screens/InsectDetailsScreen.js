@@ -63,13 +63,19 @@ const InsectDetailsScreen = ({ route }) => {
         </View>
 
         <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sheetTitle, { color: colors.text }]}>DETAILS</Text>
+          {/* --- THIS IS THE NEW, FIXED CODE --- */}
+<Text style={[styles.sheetTitle, { color: colors.text }]}>DETAILS</Text>
 
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Date :</Text><Text style={[styles.value, { color: colors.text }]}> {item.date || 'July 07, 2025'}</Text></View>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Type :</Text><Text style={[styles.value, { color: colors.text }]}> {item.type || item.name}</Text></View>
-          <View style={styles.rowMulti}><Text style={[styles.label, { color: colors.text }]}>Behavior :</Text><Text style={[styles.value, { color: colors.text }]}> {item.behavior || 'Multiple Aphids appearances'}</Text></View>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Confidence level :</Text><Text style={[styles.value, { color: colors.text }]}> {item.confidence}%</Text></View>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Time stamp :</Text><Text style={[styles.value, { color: colors.text }]}> {item.timestamp || '11:30 PM'}</Text></View>
+{/* Use the timestamp to show the date */}
+<View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Date :</Text><Text style={[styles.value, { color: colors.text }]}> {item.timestamp ? item.timestamp.toDate().toLocaleDateString() : 'N/A'}</Text></View>
+
+{/* The "Health" status IS the item name */}
+<View style={styles.rowMulti}><Text style={[styles.label, { color: colors.text }]}>Status :</Text><Text style={[styles.value, { color: colors.text }]}> {item.name}</Text></View>
+
+<View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Confidence level :</Text><Text style={[styles.value, { color: colors.text }]}> {item.confidence}%</Text></View>
+
+{/* Use the timestamp to show the time */}
+<View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Time :</Text><Text style={[styles.value, { color: colors.text }]}> {item.timestamp ? item.timestamp.toDate().toLocaleTimeString() : 'N/A'}</Text></View>
         </View>
       </ScrollView>
 
