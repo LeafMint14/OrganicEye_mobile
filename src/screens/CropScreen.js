@@ -1,75 +1,133 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, TouchableOpacity, 
-  Image, ScrollView, ImageBackground, ActivityIndicator // <-- MODIFIED: Added ActivityIndicator
+  View, Text, StyleSheet, ImageBackground, FlatList,
+  TouchableOpacity, ActivityIndicator, Alert 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-
-// --- NEW IMPORTS ---
-// Make sure this path to your firebase config is correct!
-// It might be './firebaseConfig' or '../firebaseConfig' depending on your structure
-import { db } from '../../firebase'; 
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-// Import the filter list from your new config file
+import { db } from '../../firebase'; // Make sure this path is correct
+import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from 'firebase/firestore';
 import { CROP_LABELS } from '../config/LabelMap'; 
-// --- END NEW IMPORTS ---
+import DetectionCard from '../components/DetectionCard'; 
+import { Ionicons } from '@expo/vector-icons'; 
 
 const CropScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]); 
 
-  // --- NEW: Create dynamic state for items and loading ---
-  const [items, setItems] = useState([]); // Start with an empty list
-  const [loading, setLoading] = useState(true); // To show a spinner
-  // --- END NEW STATE ---
-
-  // --- NEW: Add Firebase listener hook ---
   useEffect(() => {
-    // 1. Create the query
     const q = query(
-      collection(db, "detections"), // Get the "detections" collection
-      where("detection", "in", CROP_LABELS), // Filter to ONLY show items in our CROP_LABELS list
-      orderBy("timestamp", "desc") // Show the newest ones first
+      collection(db, "detections"),
+      where("detection", "in", CROP_LABELS),
+      orderBy("timestamp", "desc")
     );
 
-    // 2. Set up the real-time listener
-    // This is inside your useEffect hook...
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const detectionsData = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        
         if (data.imageUrl) {
-          
-          // --- HERE IS YOUR NEW ALGORITHM ---
-          let status = 'UNKNOWN';
-          if (data.detection === 'Healthy') {
-            status = 'HEALTHY';
-          } else if (CROP_LABELS.includes(data.detection)) {
-            // If the label is in CROP_LABELS but NOT 'Healthy', it's unhealthy.
-            status = 'UNHEALTHY';
-          }
-          // --- END OF ALGORITHM ---
-
           detectionsData.push({
             id: doc.id,
-            name: data.detection, // The specific label (e.g., "Wilting")
-            confidence: Math.round(data.confidence * 100), 
-            img: { uri: data.imageUrl }, 
+            detection: data.detection,
+            confidence: Math.round(data.confidence * 100),
+            imageUrl: data.imageUrl, 
             timestamp: data.timestamp,
-            status: status // <-- We add the new status field here
           });
         }
       });
       setItems(detectionsData); 
       setLoading(false);
     });
-// ...
 
-    // 3. Clean up the listener when the screen is closed
     return () => unsubscribe();
-  }, []); // The empty array [] means this runs once when the screen loads
-  // --- END FIREBASE LISTENER ---
+  }, []);
 
+  const handleLongPress = (docId) => {
+    setIsSelectMode(true);
+    setSelectedItems([docId]);
+  };
+
+  const handleCardPress = (item) => {
+    if (isSelectMode) {
+      if (selectedItems.includes(item.id)) {
+        setSelectedItems(selectedItems.filter(id => id !== item.id));
+      } else {
+        setSelectedItems([...selectedItems, item.id]);
+      }
+    } else {
+      navigation.navigate('CropDetails', { 
+        item: {
+          id: item.id,
+          name: item.detection,
+          img: { uri: item.imageUrl },
+          timestamp: item.timestamp,
+          confidence: item.confidence,
+        }
+      });
+    }
+  };
+  
+  const cancelSelection = () => {
+    setIsSelectMode(false);
+    setSelectedItems([]);
+  };
+
+  const handleDeleteSelected = async () => {
+    Alert.alert(
+      "Delete Detections",
+      `Are you sure you want to delete ${selectedItems.length} item(s)?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const batch = writeBatch(db);
+              selectedItems.forEach(docId => {
+                const docRef = doc(db, "detections", docId);
+                batch.delete(docRef);
+              });
+              await batch.commit();
+              cancelSelection();
+              Alert.alert("Success", "Selected items deleted.");
+            } catch (error) {
+              console.error("Error deleting items: ", error);
+              Alert.alert("Error", "Could not delete items.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderItem = ({ item }) => {
+    const isSelected = selectedItems.includes(item.id);
+
+    return (
+      <DetectionCard
+        item={item}
+        isSelected={isSelected}
+        onPress={() => handleCardPress(item)}
+        onLongPress={() => handleLongPress(item.id)}
+      />
+    );
+  };
+
+  if (loading) {
+    return (
+      <ImageBackground
+        source={require('../../assets/backgroundimage.png')}
+        style={styles.container}
+        resizeMode="cover"
+      >
+        <ActivityIndicator size="large" color={colors.primary} style={{ flex: 1 }} />
+      </ImageBackground>
+    );
+  }
 
   return (
     <ImageBackground
@@ -79,81 +137,124 @@ const CropScreen = ({ navigation }) => {
     >
       <View style={styles.brandBar}>
         <Text style={[styles.brandText, { color: colors.text }]}>ORGANIC-EYE</Text>
-        <View style={[styles.rolePill, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.35)' }]}>
-          <Text style={styles.roleDot}></Text>
-          <Text style={[styles.roleText, { color: colors.text }]}>Farmer</Text>
-        </View>
       </View>
-
       <View style={styles.titleBanner}>
-        <Text style={styles.crop}></Text>
         <Text style={[styles.titleBannerText, { color: colors.text }]}>CROP DATA</Text>
-        <Text style={styles.crop}></Text>
       </View>
 
-      {/* --- MODIFIED: This section now shows a loader or the list --- */}
+      {/* --- MODIFIED: Added the white sheet View wrapper --- */}
       <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-        {loading ? (
-          // If loading, show a spinner
-          <ActivityIndicator style={{ marginTop: 50 }} size="large" color={colors.primary} />
-        ) : items.length === 0 ? (
-          // If no items, show a message
-          <Text style={[styles.cardTitle, { color: colors.text, textAlign: 'center', marginTop: 50 }]}>
-            No crop data found.
-          </Text>
-        ) : (
-          // Otherwise, show the list of detections
-        // This is in your return() section...
-          <ScrollView contentContainerStyle={{ paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
-            {items.map(item => (
-              <View key={item.id} style={[styles.card, { backgroundColor: colors.bg }]}>
-                <Image source={item.img} style={styles.cardImage} resizeMode="cover" />
-                <View style={styles.cardInfo}>
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
-                  
-                  {/* --- NEW STATUS TEXT --- */}
-                  <Text style={{ 
-                    fontWeight: 'bold', 
-                    color: item.status === 'HEALTHY' ? 'green' : 'red' 
-                  }}>
-                    Status: {item.status}
-                  </Text>
-                  {/* --- END NEW STATUS --- */}
-
-                  <Text style={[styles.cardSub, { color: colors.muted }]}>{item.confidence}% confidence</Text>
-                </View>
-                <TouchableOpacity style={[styles.viewPill, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('CropDetails', { item })}>
-                  <Text style={styles.viewPillText}>VIEW</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-// ...
-        )}
+        <FlatList
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No crop detections yet.</Text>
+            </View>
+          }
+          extraData={selectedItems} 
+        />
       </View>
       {/* --- END OF MODIFICATION --- */}
+
+
+      {isSelectMode && (
+        <View style={[styles.actionContainer, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={cancelSelection} style={styles.actionButton}>
+            <Ionicons name="close-circle" size={28} color={colors.muted} />
+            <Text style={[styles.actionText, { color: colors.muted }]}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={[styles.selectedCount, { color: colors.primary }]}>
+            {selectedItems.length} selected
+          </Text>
+          <TouchableOpacity 
+            onPress={handleDeleteSelected} 
+            style={styles.actionButton}
+            disabled={selectedItems.length === 0}
+          >
+            <Ionicons 
+              name="trash" 
+              size={28} 
+              color={selectedItems.length > 0 ? '#E74C3C' : colors.muted}
+            />
+            <Text style={[
+              styles.actionText, 
+              { color: selectedItems.length > 0 ? '#E74C3C' : colors.muted }
+            ]}>
+              Delete
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  brandBar: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  brandText: { color: '#E9F5EC', fontWeight: '800', letterSpacing: 2, fontSize: 16 },
-  rolePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
-  roleDot: { color: '#F6C453', marginRight: 6 },
-  roleText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  titleBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginHorizontal: 16, marginBottom: 8 },
-  crop: { fontSize: 20, marginHorizontal: 8 },
-  titleBannerText: { color: '#0b3010', fontWeight: '800', fontSize: 18, letterSpacing: 1 },
-  sheet: { flex: 1, marginHorizontal: 16, backgroundColor: '#ffffff', borderRadius: 18, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6 },
-  card: { flexDirection: 'row', alignItems: 'center', padding: 16, marginHorizontal: 12, marginVertical: 6, backgroundColor: '#f8f9fa', borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
-  cardImage: { width: 60, height: 60, borderRadius: 8, marginRight: 12 },
-  cardInfo: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#2c3e50', marginBottom: 4 },
-  cardSub: { fontSize: 14, color: '#7f8c8d' },
-  viewPill: { backgroundColor: '#1f7a4f', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  viewPillText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  brandBar: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 10 },
+  brandText: { fontWeight: '800', letterSpacing: 2, fontSize: 16, textAlign: 'center' },
+  titleBanner: { paddingVertical: 12, marginHorizontal: 16, marginBottom: 8 },
+  titleBannerText: { fontWeight: '800', fontSize: 18, letterSpacing: 1, textAlign: 'center' },
+  
+  // --- NEW: Added the sheet style back ---
+  sheet: { 
+    flex: 1, 
+    marginHorizontal: 16, 
+    // backgroundColor is set inline
+    borderRadius: 18, 
+    elevation: 4, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 6,
+    overflow: 'hidden', // Ensures FlatList respects the border radius
+  },
+  // --- END NEW STYLE ---
+
+  listContainer: {
+    paddingTop: 10,
+    paddingHorizontal: 12, // Add padding for inside the sheet
+    paddingBottom: 100,
+  },
+  emptyContainer: {
+    flex: 1,
+    paddingTop: 150,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  actionContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    elevation: 10,
+  },
+  actionButton: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  actionText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  selectedCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  }
 });
 
 export default CropScreen;

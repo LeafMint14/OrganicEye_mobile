@@ -15,6 +15,7 @@
     "@react-navigation/bottom-tabs": "^7.4.7",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/stack": "^7.4.8",
+    "date-fns": "^4.1.0",
     "expo": "54.0.20",
     "expo-auth-session": "~7.0.8",
     "expo-file-system": "~19.0.17",
