@@ -137,23 +137,23 @@ const PrivacySettingsScreen = ({ navigation }) => {
   };
 
   const privacyOptions = [
-    {
-      title: 'Profile & Visibility',
-      items: [
-        {
-          key: 'profileVisibility',
-          title: 'Profile Visibility',
-          description: 'Make your profile visible to other users',
-          icon: 'person-outline',
-        },
-        {
-          key: 'notifications',
-          title: 'Push Notifications',
-          description: 'Receive notifications about app updates and features',
-          icon: 'notifications-outline',
-        },
-      ]
-    },
+    // {
+    //   title: 'Profile & Visibility',
+    //   items: [
+    //     {
+    //       key: 'profileVisibility',
+    //       title: 'Profile Visibility',
+    //       description: 'Make your profile visible to other users',
+    //       icon: 'person-outline',
+    //     },
+    //     {
+    //       key: 'notifications',
+    //       title: 'Push Notifications',
+    //       description: 'Receive notifications about app updates and features',
+    //       icon: 'notifications-outline',
+    //     },
+    //   ]
+    // },
     {
       title: 'Data Collection',
       items: [
@@ -192,31 +192,31 @@ const PrivacySettingsScreen = ({ navigation }) => {
           description: 'Allow the app to access your camera for crop detection',
           icon: 'camera-outline',
         },
-        {
-          key: 'microphoneAccess',
-          title: 'Microphone Access',
-          description: 'Allow the app to access your microphone for voice notes',
-          icon: 'mic-outline',
-        },
-        {
-          key: 'contactsAccess',
-          title: 'Contacts Access',
-          description: 'Allow the app to access your contacts for sharing',
-          icon: 'people-outline',
-        },
+        // {
+        //   key: 'microphoneAccess',
+        //   title: 'Microphone Access',
+        //   description: 'Allow the app to access your microphone for voice notes',
+        //   icon: 'mic-outline',
+        // },
+        // {
+        //   key: 'contactsAccess',
+        //   title: 'Contacts Access',
+        //   description: 'Allow the app to access your contacts for sharing',
+        //   icon: 'people-outline',
+        // },
       ]
     },
-    {
-      title: 'Communication',
-      items: [
-        {
-          key: 'marketingEmails',
-          title: 'Marketing Emails',
-          description: 'Receive promotional emails and updates',
-          icon: 'mail-outline',
-        },
-      ]
-    }
+    // {
+    //   title: 'Communication',
+    //   items: [
+    //     {
+    //       key: 'marketingEmails',
+    //       title: 'Marketing Emails',
+    //       description: 'Receive promotional emails and updates',
+    //       icon: 'mail-outline',
+    //     },
+    //   ]
+    // }
   ];
 
   if (loading) {
@@ -299,13 +299,13 @@ const PrivacySettingsScreen = ({ navigation }) => {
 
         {/* Action Buttons */}
         <View style={styles.actionSection}>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.primary }]}
             onPress={handleExportData}
           >
             <Ionicons name="download-outline" size={20} color="#fff" style={styles.buttonIcon} />
             <Text style={styles.actionButtonText}>Export My Data</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: '#f39c12' }]}
@@ -315,13 +315,13 @@ const PrivacySettingsScreen = ({ navigation }) => {
             <Text style={styles.actionButtonText}>Reset to Defaults</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: '#e74c3c' }]}
             onPress={handleDeleteData}
           >
             <Ionicons name="trash-outline" size={20} color="#fff" style={styles.buttonIcon} />
             <Text style={styles.actionButtonText}>Delete All Data</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         {/* Footer */}

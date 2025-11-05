@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 const SettingsScreen = ({ navigation }) => {
   const [notifications, setNotifications] = useState(true);
-  const [autoDetection, setAutoDetection] = useState(false);
+  // const [autoDetection, setAutoDetection] = useState(false);
   const [dataSync, setDataSync] = useState(true);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,39 +16,50 @@ const SettingsScreen = ({ navigation }) => {
   const { theme, colors, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
 
- useEffect(() => {
-  const fetchUserData = async () => {
-    console.log('useEffect triggered, user:', user);
-    
-    if (user?.uid) {
-      try {
-        console.log('Fetching data for UID:', user.uid);
-        setLoading(true);
-        
-        const result = await UserService.getUserData(user.uid);
-        console.log('UserService result:', result);
-        
-        if (result.success) {
-          console.log('User data received:', result.userData);
-          setUserData(result.userData);
-        } else {
-          console.log('UserService error:', result.error);
-          Alert.alert('Error', result.error);
+  useEffect(() => {
+    const fetchUserData = async () => {
+      console.log('useEffect triggered, user:', user);
+      
+      if (user?.uid) {
+        try {
+          console.log('Fetching data for UID:', user.uid);
+          // Set loading to true ONLY if userData is not already loaded
+          if (!userData) {
+             setLoading(true);
+          }
+          
+          const result = await UserService.getUserData(user.uid);
+          console.log('UserService result:', result);
+          
+          if (result.success) {
+            console.log('User data received:', result.userData);
+            setUserData(result.userData);
+          } else {
+            console.warn('UserService error:', result.error);
+          }
+        } catch (error) {
+          console.error('Error in fetchUserData:', error);
+          Alert.alert('Error', 'Failed to load user data');
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error in fetchUserData:', error);
-        Alert.alert('Error', 'Failed to load user data');
-      } finally {
+      } else {
+        console.log('No user UID available or user is null');
         setLoading(false);
       }
-    } else {
-      console.log('No user UID available or user is null');
-      setLoading(false);
-    }
-  };
+    };
+    
+    // Add a listener that re-runs fetchUserData() every time this screen
+    // comes into focus (e.g., when you navigate back from ProfileEdit)
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('SettingsScreen FOCUSED, re-fetching data...');
+      fetchUserData();
+    });
 
-  fetchUserData();
-}, [user]);
+    // Return the unsubscribe function to clean up the listener
+    return unsubscribe;
+    
+  }, [user, navigation, userData]);
 
   const profile = {
     name: userData?.First_Name && userData?.Last_Name 
@@ -57,7 +68,10 @@ const SettingsScreen = ({ navigation }) => {
     email: user?.email || 'email@example.com',
     contact: userData?.contact || 'Not provided',
     role: userData?.role || 'Farmer',
-    avatar: require('../../assets/logo.png'),
+    // This now dynamically uses the avatarUrl from the database
+    avatar: userData?.avatarUrl 
+      ? { uri: userData.avatarUrl } 
+      : require('../../assets/logo.png'),
   };
 
   const settingsOptions = [
@@ -67,7 +81,7 @@ const SettingsScreen = ({ navigation }) => {
         { name: 'Edit Profile', icon: 'person-outline', action: 'profile' },
         { name: 'Change Password', icon: 'lock-closed-outline', action: 'password' },
         { name: 'Privacy Settings', icon: 'shield-checkmark-outline', action: 'privacy' },
-        { name: 'Account Security', icon: 'security-outline', action: 'security' },
+        // { name: 'Account Security', icon: 'security-outline', action: 'security' },
       ]
     },
     {
@@ -75,26 +89,26 @@ const SettingsScreen = ({ navigation }) => {
       items: [
         { name: 'Detection Settings', icon: 'camera-outline', action: 'detection' },
         { name: 'Alert Thresholds', icon: 'notifications-outline', action: 'alerts' },
-        { name: 'Field Management', icon: 'leaf-outline', action: 'fields' },
+        // { name: 'Field Management', icon: 'leaf-outline', action: 'fields' },
         { name: 'Detection History', icon: 'time-outline', action: 'history' },
       ]
     },
-    {
-      title: 'Data & Storage',
-      items: [
-        { name: 'Data Export', icon: 'download-outline', action: 'export' },
-        { name: 'Storage Usage', icon: 'analytics-outline', action: 'storage' },
-        { name: 'Backup Settings', icon: 'cloud-upload-outline', action: 'backup' },
-        { name: 'Clear Cache', icon: 'trash-outline', action: 'clearCache' },
-      ]
-    },
+    // {
+    //   title: 'Data & Storage',
+    //   items: [
+    //     { name: 'Data Export', icon: 'download-outline', action: 'export' },
+    //     { name: 'Storage Usage', icon: 'analytics-outline', action: 'storage' },
+    //     { name: 'Backup Settings', icon: 'cloud-upload-outline', action: 'backup' },
+    //     { name: 'Clear Cache', icon: 'trash-outline', action: 'clearCache' },
+    //   ]
+    // },
     {
       title: 'Support',
       items: [
-        { name: 'Help Center', icon: 'help-circle-outline', action: 'help' },
+        // { name: 'Help Center', icon: 'help-circle-outline', action: 'help' },
         { name: 'Contact Support', icon: 'mail-outline', action: 'contact' },
-        { name: 'Rate App', icon: 'star-outline', action: 'rate' },
-        { name: 'Share App', icon: 'share-outline', action: 'share' },
+        // { name: 'Rate App', icon: 'star-outline', action: 'rate' },
+        // { name: 'Share App', icon: 'share-outline', action: 'share' },
         { name: 'About', icon: 'information-circle-outline', action: 'about' },
       ]
     }
@@ -211,7 +225,6 @@ const SettingsScreen = ({ navigation }) => {
         );
         break;
       case 'storage':
-        // Calculate real storage usage
         const calculateStorageUsage = () => {
           const appData = 45.2;
           const cache = 12.8;
@@ -380,36 +393,33 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
-  Alert.alert(
-    'Logout',
-    'Are you sure you want to logout?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Logout', 
-        style: 'destructive', 
-        onPress: async () => {
-          try {
-            // Use the logout function from auth context, not signOut directly
-            const result = await logout(); // This calls AuthService.logout()
-            
-            if (result.success) {
-              // Logout successful - navigation will happen automatically
-              console.log('Logout successful');
-            } else {
-              Alert.alert('Error', result.error || 'Failed to logout');
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              const result = await logout(); // This calls AuthService.logout()
+              
+              if (result.success) {
+                console.log('Logout successful');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to logout');
+              }
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
             }
-          } catch (error) {
-            console.error('Logout error:', error);
-            Alert.alert('Error', 'Failed to logout. Please try again.');
           }
         }
-      }
-    ]
-  );
-};
+      ]
+    );
+  };
 
-  // Loading state should return early
   if (loading) {
     return (
       <ImageBackground
@@ -425,7 +435,6 @@ const SettingsScreen = ({ navigation }) => {
     );
   }
 
-  // Main return should be outside the if condition
   return (
     <ImageBackground
       source={require('../../assets/backgroundimage.png')}
@@ -445,9 +454,12 @@ const SettingsScreen = ({ navigation }) => {
               <Text style={[styles.roleBadgeText, { color: colors.text }]}>{profile.role}</Text>
             </View>
           </View>
-          <TouchableOpacity style={[styles.editBtn, { backgroundColor: colors.primary }]} onPress={() => Alert.alert('Edit Profile', 'Edit screen would open here')}> 
-            <Text style={styles.editBtnText}>Edit</Text>
-          </TouchableOpacity>
+          <TouchableOpacity 
+          style={[styles.editBtn, { backgroundColor: colors.primary }]} 
+          onPress={() => navigation.navigate('ProfileEdit')}
+        > 
+          <Text style={styles.editBtnText}>Edit</Text>
+        </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
@@ -508,13 +520,13 @@ const SettingsScreen = ({ navigation }) => {
         <View style={styles.toggleSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Preferences</Text>
 
-          <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
+          {/* <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
             <View style={styles.toggleInfo}>
               <Text style={[styles.toggleTitle, { color: colors.text }]}>Dark Mode</Text>
               <Text style={[styles.toggleDescription, { color: colors.muted }]}>Switch between light and dark theme</Text>
             </View>
             <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View>
+          </View> */}
           
           <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
             <View style={styles.toggleInfo}>
@@ -524,13 +536,13 @@ const SettingsScreen = ({ navigation }) => {
             <Switch value={notifications} onValueChange={setNotifications} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
           </View>
 
-          <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
+          {/* <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
             <View style={styles.toggleInfo}>
               <Text style={[styles.toggleTitle, { color: colors.text }]}>Auto Detection</Text>
               <Text style={[styles.toggleDescription, { color: colors.muted }]}>Automatically detect insects</Text>
             </View>
             <Switch value={autoDetection} onValueChange={setAutoDetection} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View>
+          </View> */}
 
           <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
             <View style={styles.toggleInfo}>
@@ -590,237 +602,240 @@ const SettingsScreen = ({ navigation }) => {
   );
 };
 
+// ... (Your styles are perfect, no changes) ...
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 12,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginRight: 14,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  profileEmail: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#e8f5e9',
-  },
-  profileContact: {
-    marginTop: 2,
-    fontSize: 12,
-    color: '#e8f5e9',
-  },
-  roleBadge: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleBadgeDot: {
-    color: '#F6C453',
-    marginRight: 6,
-    fontSize: 16,
-  },
-  roleBadgeText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  editBtn: {
-    backgroundColor: '#1f7a4f',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  editBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  searchSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#2c3e50',
-  },
-  detailItem: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#7f8c8d',
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: '#2c3e50',
-    fontWeight: '500',
-  },
-  toggleSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  toggleItem: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  toggleInfo: {
-    flex: 1,
-  },
-  toggleTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 2,
-  },
-  toggleDescription: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
-  optionsContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  optionItem: {
-    padding: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  optionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  optionIcon: {
-    marginRight: 15,
-  },
-  optionName: {
-    fontSize: 16,
-    color: '#2c3e50',
-    fontWeight: '500',
-  },
-  optionArrow: {
-    marginLeft: 10,
-  },
-  logoutSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  logoutButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  logoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  noResultsContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  noResultsSubtext: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
+  bg: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginRight: 14,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  profileEmail: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#e8f5e9',
+  },
+  profileContact: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#e8f5e9',
+ },
+  roleBadge: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeDot: {
+    color: '#F6C453',
+    marginRight: 6,
+    fontSize: 16,
+  },
+  roleBadgeText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  editBtn: {
+    backgroundColor: '#1f7a4f',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  editBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  sectionHeader: {
+   flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  searchSection: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#2c3e50',
+  },
+  detailItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+ borderBottomColor: '#f1f2f6',
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  toggleSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+},
+  toggleItem: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  toggleInfo: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+ optionsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  optionItem: {
+    padding: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f2f6',
+  },
+  optionLeft: {
+    flexDirection: 'row',
+   alignItems: 'center',
+    flex: 1,
+  },
+  optionIcon: {
+    marginRight: 15,
+  },
+  optionName: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  optionArrow: {
+    marginLeft: 10,
+  },
+  logoutSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  logoutButton: {
+    backgroundColor: '#e74c3c',
+    paddingVertical: 15,
+
+
+borderRadius: 10,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+},
+  logoutText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  noResultsSubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
 });
 
 export default SettingsScreen;

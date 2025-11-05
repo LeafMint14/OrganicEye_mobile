@@ -39,6 +39,11 @@ export const AuthProvider = ({ children }) => {
     return await AuthService.resetPassword(email);
   };
 
+  // Change password function
+  const changePassword = async (currentPassword, newPassword) => {
+    return await AuthService.changePassword(currentPassword, newPassword);
+  };
+
   useEffect(() => {
     console.log('AuthContext: Setting up auth state listener');
     const unsubscribe = AuthService.onAuthStateChange((user) => {
@@ -57,6 +62,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     resetPassword,
+    changePassword,
     isAuthenticated: !!user
   };
 

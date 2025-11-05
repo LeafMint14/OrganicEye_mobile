@@ -4,12 +4,45 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase'; // Check this path
 
 class AuthService {
+
+  static async changePassword(currentPassword, newPassword) {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        return { success: false, error: 'No user is logged in.' };
+      }
+
+      // 1. Create a "credential" with the user's current password
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+
+      // 2. Re-authenticate the user with that credential
+      await reauthenticateWithCredential(user, credential);
+
+      // 3. If re-authentication is successful, update the password
+      await updatePassword(user, newPassword);
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('Change Password Error:', error);
+      // This will return "Wrong password" if they typed it incorrectly
+      return {
+        success: false,
+        error: this.getErrorMessage(error.code)
+      };
+    }
+  }
+
+
   // Register with email, password, and additional user data
   static async register(email, password, First_Name, Last_Name, contact) {
     try {

@@ -28,7 +28,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      
+  
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to let you choose a profile picture."
+        }
+      ]
+     
+      
     ]
   }
 }

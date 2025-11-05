@@ -9,12 +9,60 @@ import {
   Alert, 
   Image, 
   ImageBackground, 
-  ActivityIndicator 
+  ActivityIndicator,
+  Platform 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker'; 
+
+// --- Helper function to upload the image ---
+const uploadImageToCloudinary = async (localUri) => {
+  
+  const CLOUD_NAME = "dqqhcfe39"; // Your Cloud Name
+  const UPLOAD_PRESET = "pi_uploads"; // From our Pi script
+  
+  if (!localUri) return null;
+
+  const apiUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+  
+  
+  const uriParts = localUri.split('.');
+  const fileType = uriParts[uriParts.length - 1];
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: localUri,
+    name: `profile_${Date.now()}.${fileType}`,
+    type: `image/${fileType}`,
+  });
+  formData.append('upload_preset', UPLOAD_PRESET);
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    const data = await response.json();
+    if (data.secure_url) {
+      console.log('Cloudinary Upload Success:', data.secure_url);
+      return data.secure_url;
+    } else {
+      console.error('Cloudinary Upload Error:', data);
+      return null;
+    }
+  } catch (error) {
+    console.error('Cloudinary Upload Fetch Error:', error);
+    return null;
+  }
+};
+
 
 const ProfileEditScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -23,7 +71,10 @@ const ProfileEditScreen = ({ navigation }) => {
     contact: '',
     email: '',
   });
-  const [loading, setLoading] = useState(false);
+  
+  const [image, setImage] = useState(null);
+  
+  const [loading, setLoading] = useState(true); 
   const [saving, setSaving] = useState(false);
   const { theme, colors } = useTheme();
   const { user } = useAuth();
@@ -34,7 +85,7 @@ const ProfileEditScreen = ({ navigation }) => {
 
   const loadUserData = async () => {
     if (user?.uid) {
-      setLoading(true);
+     
       try {
         const result = await UserService.getUserData(user.uid);
         if (result.success) {
@@ -44,6 +95,11 @@ const ProfileEditScreen = ({ navigation }) => {
             contact: result.userData.contact || '',
             email: user.email || '',
           });
+          
+         
+          if (result.userData.avatarUrl) {
+            setImage(result.userData.avatarUrl);
+          }
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to load profile data');
@@ -57,7 +113,32 @@ const ProfileEditScreen = ({ navigation }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  
+  const pickImage = async () => {
+   
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need permission to access your photo library.');
+      return;
+    }
+
+    
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1], 
+      quality: 0.7, 
+    });
+
+    if (!result.canceled) {
+   
+      setImage(result.assets[0].uri);
+    }
+  };
+
+
   const validateForm = () => {
+ 
     if (!formData.First_Name.trim()) {
       Alert.alert('Error', 'First name is required');
       return false;
@@ -81,19 +162,37 @@ const ProfileEditScreen = ({ navigation }) => {
     return true;
   };
 
+  
   const handleSave = async () => {
     if (!validateForm()) return;
 
     setSaving(true);
     try {
+      let newAvatarUrl = null;
+
+     
+      if (image && (image.startsWith('file://') || image.startsWith('content://'))) {
+        newAvatarUrl = await uploadImageToCloudinary(image);
+        if (!newAvatarUrl) {
+          throw new Error("Image upload failed");
+        }
+      }
+
+     
       const updatedData = {
         First_Name: formData.First_Name.trim(),
         Last_Name: formData.Last_Name.trim(),
         contact: formData.contact.trim(),
         email: formData.email.trim(),
-        updatedAt: new Date(),
+        
       };
 
+     
+      if (newAvatarUrl) {
+        updatedData.avatarUrl = newAvatarUrl;
+      }
+
+       
       const result = await UserService.updateUserData(user.uid, updatedData);
       
       if (result.success) {
@@ -104,6 +203,7 @@ const ProfileEditScreen = ({ navigation }) => {
         Alert.alert('Error', result.error || 'Failed to update profile');
       }
     } catch (error) {
+      console.error("Save Profile Error:", error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
@@ -132,7 +232,7 @@ const ProfileEditScreen = ({ navigation }) => {
       resizeMode="cover"
     >
       <ScrollView style={styles.container}>
-        {/* Header */}
+       
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton} 
@@ -144,11 +244,22 @@ const ProfileEditScreen = ({ navigation }) => {
           <View style={styles.placeholder} />
         </View>
 
-        {/* Profile Picture Section */}
+       
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <Image source={require('../../assets/logo.png')} style={styles.avatar} />
-            <TouchableOpacity style={[styles.editAvatarBtn, { backgroundColor: colors.primary }]}>
+          
+           
+            <Image 
+              source={image ? { uri: image } : require('../../assets/logo.png')} 
+              style={styles.avatar} 
+            />
+            
+           
+            <TouchableOpacity 
+              style={[styles.editAvatarBtn, { backgroundColor: colors.primary }]}
+              onPress={pickImage} 
+              disabled={saving}
+            >
               <Ionicons name="camera" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -157,8 +268,9 @@ const ProfileEditScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Form */}
+        {/* --- THIS IS THE FIXED FORM BLOCK --- */}
         <View style={styles.form}>
+          
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
             <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
@@ -169,6 +281,7 @@ const ProfileEditScreen = ({ navigation }) => {
                 onChangeText={(value) => handleInputChange('First_Name', value)}
                 placeholder="Enter first name"
                 placeholderTextColor={colors.muted}
+                disabled={saving}
               />
             </View>
           </View>
@@ -183,6 +296,7 @@ const ProfileEditScreen = ({ navigation }) => {
                 onChangeText={(value) => handleInputChange('Last_Name', value)}
                 placeholder="Enter last name"
                 placeholderTextColor={colors.muted}
+                disabled={saving}
               />
             </View>
           </View>
@@ -199,6 +313,7 @@ const ProfileEditScreen = ({ navigation }) => {
                 placeholderTextColor={colors.muted}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                disabled={saving}
               />
             </View>
           </View>
@@ -214,12 +329,14 @@ const ProfileEditScreen = ({ navigation }) => {
                 placeholder="Enter contact number"
                 placeholderTextColor={colors.muted}
                 keyboardType="phone-pad"
+                disabled={saving}
               />
             </View>
           </View>
-        </View>
 
-        {/* Save Button */}
+        </View>
+        {/* --- END OF FIXED FORM BLOCK --- */}
+       
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[
@@ -289,6 +406,9 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
+    
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   editAvatarBtn: {
     position: 'absolute',
@@ -300,7 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: '#fff', 
   },
   profileName: {
     fontSize: 18,

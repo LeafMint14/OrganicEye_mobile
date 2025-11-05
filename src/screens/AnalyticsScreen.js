@@ -160,11 +160,33 @@ const AnalyticsScreen = ({ navigation }) => {
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
   };
 
-  const describeArc = (cx, cy, r, startAngle, endAngle) => {
-    const start = polarToCartesian(cx, cy, r, endAngle);
-    const end = polarToCartesian(cx, cy, r, startAngle);
+ const describeArc = (cx, cy, r, startAngle, endAngle) => {
+    // --- NEW FIX: Handle the 360-degree bug ---
+    // If the slice is a full 360, make it 359.99
+    // This prevents the start and end points from being the same.
+    if (endAngle - startAngle === 360) {
+      endAngle = 359.99;
+    }
+
+    // --- Corrected logic from before ---
+    const start = polarToCartesian(cx, cy, r, startAngle);
+    const end = polarToCartesian(cx, cy, r, endAngle);
+
     const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
-    return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y} Z`;
+
+    // --- Corrected SVG Path ---
+    // M = Move to the arc's starting point
+    // A = Draw the Arc
+    // L = Draw a Line back to the center
+    // Z = Close the path
+    const d = [
+      "M", start.x, start.y,
+      "A", r, r, 0, largeArc, 1, end.x, end.y,
+      "L", cx, cy,
+      "Z",
+    ].join(" ");
+
+    return d;
   };
 
   const Pie = ({ size = 180, data }) => {

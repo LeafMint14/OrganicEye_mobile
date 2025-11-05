@@ -2,6 +2,10 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+// Import AuthService to use the resetPassword function
+import AuthService from '../services/AuthService'; 
+// Import Ionicons if you add the checklist
+import { Ionicons } from '@expo/vector-icons'; 
 
 const SignupScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -23,16 +27,34 @@ const SignupScreen = ({ navigation }) => {
   const handleSignup = async () => {
     const { First_Name, Last_Name, contact, email, password } = formData;
 
-    // Fixed validation logic (removed incorrect OR conditions)
+    // --- UPDATED VALIDATION BLOCK ---
     if (!First_Name || !Last_Name || !contact || !email || !password) {
-    Alert.alert('Error', 'Please fill in all fields');
-    return;
-  }
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
 
-  if (password.length < 12) {
-    Alert.alert('Error', 'Password must be at least 12 characters long');
-    return;
-  }
+    // New Policy Checks
+    if (password.length < 12) {
+      Alert.alert('Error', 'Password must be at least 12 characters long');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      Alert.alert('Error', 'Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      Alert.alert('Error', 'Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/\d/.test(password)) {
+      Alert.alert('Error', 'Password must contain at least one number');
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      Alert.alert('Error', 'Password must contain at least one special character (e.g., !@#$)');
+      return;
+    }
+    // --- END UPDATED VALIDATION BLOCK ---
 
     setLoading(true);
 
@@ -41,21 +63,18 @@ const SignupScreen = ({ navigation }) => {
       
       if (result.success) {
         Alert.alert('Success', 'Account created successfully!', [
-          { text: 'OK', 
-            onPress: () => navigation.navigate('Login', { email: formData.email }) }
+          { text: 'OK' }
         ]);
       } else {
-        // Show the actual error from Firebase
         Alert.alert('Registration Failed', result.error || 'Unknown error occurred');
       }
     } catch (error) {
-    // Show the actual error details
-    console.error('Signup error:', error);
-    Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+      console.error('Signup error:', error);
+      Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleForgotPassword = async () => {
     if (!formData.email) {
@@ -64,7 +83,8 @@ const SignupScreen = ({ navigation }) => {
     }
 
     try {
-      const result = await AuthService.resetPassword(formData.email);
+      // Use the imported AuthService
+      const result = await AuthService.resetPassword(formData.email); 
       if (result.success) {
         Alert.alert('Password Reset', 'Password reset email sent! Check your inbox.');
       } else {
@@ -158,12 +178,17 @@ const SignupScreen = ({ navigation }) => {
               style={[styles.input, { color: colors.text }]}
               value={formData.password}
               onChangeText={(v) => handleInputChange('password', v)}
-              placeholder="Password (min 12 characters)"
+              placeholder="Password" // Changed from "min 12 chars"
               secureTextEntry
               placeholderTextColor={colors.muted}
               editable={!loading}
             />
           </View>
+
+          {/* HERE IS WHERE YOU SHOULD ADD THE 
+            "PASSWORD REQUIREMENTS" CHECKLIST UI
+            (See "Next Step" below)
+          */}
 
           <View style={styles.rowBetween}>
             <TouchableOpacity style={styles.remember} onPress={() => setRemember(r => !r)} disabled={loading}>
@@ -197,9 +222,9 @@ const SignupScreen = ({ navigation }) => {
             <TouchableOpacity style={[styles.socialBtn, { backgroundColor: colors.card }]} disabled={loading}>
               <Text style={[styles.socialText, { color: colors.primary }]}>G</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
+            {/* <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
               <Text style={[styles.socialText, { color: '#fff' }]}>f</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
           <View style={styles.footerRow}>
@@ -214,48 +239,49 @@ const SignupScreen = ({ navigation }) => {
   );
 };
 
+// ... (Your styles are perfect) ...
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingBottom: 24 },
-  heroWrapper: { marginTop: 20, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
-  heroImage: { width: '100%', height: 200 },
-  header: { paddingHorizontal: 16, marginTop: 20, marginBottom: 8 },
-  title: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#e8f5e9' },
-  form: { paddingHorizontal: 16, marginTop: 20 },
-  inputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#ffffff', 
-    borderRadius: 12, 
-    paddingHorizontal: 12, 
-    marginBottom: 12, 
-    elevation: 2, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 1 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 2 
-  },
-  inputIcon: { marginRight: 8 },
-  iconText: { fontSize: 16 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#2e7d32' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  remember: { flexDirection: 'row', alignItems: 'center' },
-  checkbox: { width: 16, height: 16, borderWidth: 2, borderColor: '#2e7d32', borderRadius: 3, marginRight: 8 },
-  checkboxChecked: { backgroundColor: '#2e7d32' },
-  rememberText: { fontSize: 14, color: '#ffffff' },
-  forgotText: { fontSize: 14, color: '#2e7d32' },
-  signupButton: { backgroundColor: '#1f7a4f', borderRadius: 12, paddingVertical: 14, marginTop: 8 },
-  signupButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  divider: { flex: 1, height: 1, backgroundColor: '#2e7d32' },
-  dividerText: { marginHorizontal: 12, fontSize: 14, color: '#2e7d32' },
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  socialBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-  socialText: { fontSize: 18, fontWeight: '700', color: '#2e7d32' },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  footerText: { fontSize: 14, color: '#2e7d32' },
-  footerLink: { fontSize: 14, color: '#2e7d32', fontWeight: '600' },
+  container: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 24 },
+  heroWrapper: { marginTop: 20, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
+  heroImage: { width: '100%', height: 200 },
+  header: { paddingHorizontal: 16, marginTop: 20, marginBottom: 8 },
+  title: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 4 },
+  subtitle: { fontSize: 16, color: '#e8f5e9' },
+  form: { paddingHorizontal: 16, marginTop: 20 },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#ffffff', 
+    borderRadius: 12, 
+    paddingHorizontal: 12, 
+    marginBottom: 12, 
+    elevation: 2, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 2 
+  },
+  inputIcon: { marginRight: 8 },
+  iconText: { fontSize: 16 },
+  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#2e7d32' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  remember: { flexDirection: 'row', alignItems: 'center' },
+  checkbox: { width: 16, height: 16, borderWidth: 2, borderColor: '#2e7d32', borderRadius: 3, marginRight: 8 },
+  checkboxChecked: { backgroundColor: '#2e7d32' },
+  rememberText: { fontSize: 14, color: '#ffffff' },
+  forgotText: { fontSize: 14, color: '#2e7d32' },
+  signupButton: { backgroundColor: '#1f7a4f', borderRadius: 12, paddingVertical: 14, marginTop: 8 },
+  signupButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  divider: { flex: 1, height: 1, backgroundColor: '#2e7d32' },
+  dividerText: { marginHorizontal: 12, fontSize: 14, color: '#2e7d32' },
+ socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  socialBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  socialText: { fontSize: 18, fontWeight: '700', color: '#2e7d32' },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
+  footerText: { fontSize: 14, color: '#2e7d32' },
+  footerLink: { fontSize: 14, color: '#2e7d32', fontWeight: '600' },
 });
 
 export default SignupScreen;

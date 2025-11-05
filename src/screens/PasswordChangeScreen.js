@@ -11,7 +11,7 @@ import {
   ActivityIndicator 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext'; // We need this
 import { Ionicons } from '@expo/vector-icons';
 
 const PasswordChangeScreen = ({ navigation }) => {
@@ -27,7 +27,9 @@ const PasswordChangeScreen = ({ navigation }) => {
   });
   const [loading, setLoading] = useState(false);
   const { theme, colors } = useTheme();
-  const { user } = useAuth();
+  
+  // --- FIX 1: Get the 'changePassword' and 'logout' functions ---
+  const { changePassword, logout } = useAuth(); 
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -37,64 +39,100 @@ const PasswordChangeScreen = ({ navigation }) => {
     setShowPasswords(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
+  // --- FIX 2: Updated Validation Logic ---
   const validateForm = () => {
-    if (!formData.currentPassword) {
+    const { currentPassword, newPassword, confirmPassword } = formData;
+
+    if (!currentPassword) {
       Alert.alert('Error', 'Current password is required');
       return false;
     }
-    if (!formData.newPassword) {
+    if (!newPassword) {
       Alert.alert('Error', 'New password is required');
       return false;
     }
-    if (formData.newPassword.length < 8) {
-      Alert.alert('Error', 'New password must be at least 8 characters long');
+
+    // --- NEW POLICY CHECKS ---
+    if (newPassword.length < 12) {
+      Alert.alert('Error', 'New password must be at least 12 characters long');
       return false;
     }
-    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.newPassword)) {
-      Alert.alert('Error', 'New password must contain at least one uppercase letter, one lowercase letter, and one number');
+    if (!/[a-z]/.test(newPassword)) {
+      Alert.alert('Error', 'New password must contain at least one lowercase letter');
       return false;
     }
-    if (formData.newPassword !== formData.confirmPassword) {
+    if (!/[A-Z]/.test(newPassword)) {
+      Alert.alert('Error', 'New password must contain at least one uppercase letter');
+      return false;
+    }
+    if (!/\d/.test(newPassword)) {
+      Alert.alert('Error', 'New password must contain at least one number');
+      return false;
+    }
+    if (!/[^A-Za-z0-9]/.test(newPassword)) {
+      Alert.alert('Error', 'New password must contain at least one special character (e.g., !@#$)');
+      return false;
+    }
+    // --- END NEW POLICY ---
+
+    if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'New passwords do not match');
       return false;
     }
-    if (formData.currentPassword === formData.newPassword) {
+    if (currentPassword === newPassword) {
       Alert.alert('Error', 'New password must be different from current password');
       return false;
     }
     return true;
   };
 
+  // --- This is the REAL Firebase function ---
   const handleChangePassword = async () => {
     if (!validateForm()) return;
 
     setLoading(true);
     try {
-      // In a real app, you would call Firebase's updatePassword method
-      // For now, we'll simulate the process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      Alert.alert(
-        'Success', 
-        'Password changed successfully!', 
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      // This is the REAL Firebase logic
+      const result = await changePassword(
+        formData.currentPassword, 
+        formData.newPassword
       );
+      
+      if (result.success) {
+        // This is the "logout" feature you requested
+        Alert.alert(
+          'Success', 
+          'Password changed. For your security, you will now be logged out.', 
+          [{ 
+            text: 'OK', 
+            onPress: async () => {
+              await logout();
+              // AuthContext will handle navigation to Login screen
+            } 
+          }]
+        );
+      } else {
+        // This will show the real error from Firebase (e.g., "Incorrect password.")
+        Alert.alert('Error', result.error || 'Failed to change password.');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to change password. Please try again.');
+      console.error("Change Password Error:", error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  // --- FIX 3: Updated Password Strength Meter ---
   const getPasswordStrength = (password) => {
     if (password.length === 0) return { strength: 0, text: '', color: '#ccc' };
     
     let strength = 0;
-    if (password.length >= 8) strength += 1;
+    if (password.length >= 12) strength += 1; // <-- UPDATED from 8 to 12
     if (/[a-z]/.test(password)) strength += 1;
     if (/[A-Z]/.test(password)) strength += 1;
     if (/\d/.test(password)) strength += 1;
-    if (/[^A-Za-z0-9]/.test(password)) strength += 1;
+    if (/[^A-Za-z0-9]/.test(password)) strength += 1; // Checks for special char
 
     const strengthLevels = [
       { strength: 0, text: 'Very Weak', color: '#e74c3c' },
@@ -153,6 +191,7 @@ const PasswordChangeScreen = ({ navigation }) => {
                 placeholder="Enter current password"
                 placeholderTextColor={colors.muted}
                 secureTextEntry={!showPasswords.current}
+                editable={!loading} // <-- Use `loading` to disable
               />
               <TouchableOpacity onPress={() => togglePasswordVisibility('current')}>
                 <Ionicons 
@@ -175,6 +214,7 @@ const PasswordChangeScreen = ({ navigation }) => {
                 placeholder="Enter new password"
                 placeholderTextColor={colors.muted}
                 secureTextEntry={!showPasswords.new}
+                editable={!loading} // <-- Use `loading` to disable
               />
               <TouchableOpacity onPress={() => togglePasswordVisibility('new')}>
                 <Ionicons 
@@ -217,6 +257,7 @@ const PasswordChangeScreen = ({ navigation }) => {
                 placeholder="Confirm new password"
                 placeholderTextColor={colors.muted}
                 secureTextEntry={!showPasswords.confirm}
+                editable={!loading} // <-- Use `loading` to disable
               />
               <TouchableOpacity onPress={() => togglePasswordVisibility('confirm')}>
                 <Ionicons 
@@ -229,18 +270,18 @@ const PasswordChangeScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Password Requirements */}
+        {/* --- FIX 4: Updated Password Requirements UI --- */}
         <View style={[styles.requirementsCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.requirementsTitle, { color: colors.text }]}>Password Requirements:</Text>
           <View style={styles.requirementsList}>
             <View style={styles.requirementItem}>
               <Ionicons 
-                name={formData.newPassword.length >= 8 ? "checkmark-circle" : "ellipse-outline"} 
+                name={formData.newPassword.length >= 12 ? "checkmark-circle" : "ellipse-outline"} // <-- UPDATED
                 size={16} 
-                color={formData.newPassword.length >= 8 ? "#2ecc71" : colors.muted} 
+                color={formData.newPassword.length >= 12 ? "#2ecc71" : colors.muted} // <-- UPDATED
               />
               <Text style={[styles.requirementText, { color: colors.text }]}>
-                At least 8 characters long
+                At least 12 characters long {/* <-- UPDATED */}
               </Text>
             </View>
             <View style={styles.requirementItem}>
@@ -273,6 +314,18 @@ const PasswordChangeScreen = ({ navigation }) => {
                 Contains number
               </Text>
             </View>
+            {/* --- NEW ITEM --- */}
+            <View style={styles.requirementItem}>
+              <Ionicons 
+                name={/[^A-Za-z0-9]/.test(formData.newPassword) ? "checkmark-circle" : "ellipse-outline"} 
+                size={16} 
+                color={/[^A-Za-z0-9]/.test(formData.newPassword) ? "#2ecc71" : colors.muted} 
+              />
+              <Text style={[styles.requirementText, { color: colors.text }]}>
+                Contains special character
+              </Text>
+            </View>
+            {/* --- END NEW ITEM --- */}
           </View>
         </View>
 
@@ -330,6 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 20,
     marginBottom: 20,
+    marginTop: 10, // Added some margin
     padding: 15,
     borderRadius: 12,
     elevation: 2,
