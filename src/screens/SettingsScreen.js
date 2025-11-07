@@ -87,6 +87,7 @@ const SettingsScreen = ({ navigation }) => {
     {
       title: 'Detection',
       items: [
+        { name: 'Register IoT Device', icon: 'qr-code-outline', action: 'registerIoT' },
         { name: 'Detection Settings', icon: 'camera-outline', action: 'detection' },
         { name: 'Alert Thresholds', icon: 'notifications-outline', action: 'alerts' },
         // { name: 'Field Management', icon: 'leaf-outline', action: 'fields' },
@@ -124,6 +125,9 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleSettingAction = async (action) => {
     switch (action) {
+      case 'registerIoT':
+      navigation.navigate('RegisterIoT'); // Make sure this matches your navigator's screen name
+      break;
       case 'profile':
         navigation.navigate('ProfileEdit');
         break;

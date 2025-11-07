@@ -1,28 +1,23 @@
 // src/config/labelMap.js
 
-// This file just helps us filter our data for the two screens
-
-// 1. CROP-RELATED LABELS
+// These are the 5 Crop classes from your new model
 export const CROP_LABELS = [
   'Healthy',
-  'Insect Bite',
+  'Insect bite',
   'Spotting',
   'Wilting',
-  'Yellowing'
+  'Yellowing',
 ];
 
-// 2. INSECT-RELATED LABELS
+// These are the 7 Insect classes from your new model
 export const INSECT_LABELS = [
-  'Beneficial Bees',
+  'Beneficial Bee',
   'Beneficial Lacewing Larvae',
   'Beneficial Ladybug',
   'Beneficial Larvae',
-  'Beneficial Wasps',
-  'Infected Aphids',
-  'Infected Flea Beetles',
-  'Infected Leaf Miners',
-  'Infected Pumpkin Beetles',
-  'Infected Squash Beetles'
+  'Infected Aphid',
+  'Infected Flea Beetle',
+  'Infected Pumpkin Beetle',
 ];
 
 

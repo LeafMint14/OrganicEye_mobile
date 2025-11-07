@@ -1,21 +1,160 @@
-﻿import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackground } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, StyleSheet, ScrollView, 
+  TouchableOpacity, Image, ImageBackground, ActivityIndicator 
+} from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+
+import { useAuth } from '../context/AuthContext';
+import { db } from '../../firebase';
+// --- FIX: Added 'doc' to the import ---
+import { doc, collection, query, where, orderBy, onSnapshot, limit, Timestamp } from 'firebase/firestore';
+import UserService from '../services/UserService';
+import { Ionicons } from '@expo/vector-icons'; 
+
+// Helper function to format timestamps
+const formatTimeAgo = (timestamp) => {
+  if (!timestamp) return 'Just now';
+  const now = new Date();
+  const detectionDate = timestamp.toDate();
+  const seconds = Math.floor((now - detectionDate) / 1000);
+
+  let interval = seconds / 31536000;
+  if (interval > 1) return Math.floor(interval) + " years ago";
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + " months ago";
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + " days ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + " minutes ago";
+  return Math.floor(seconds) + " seconds ago";
+};
+
+// Helper function to get risk color
+const getStatusStyle = (detection) => {
+  const highRisk = ['Infected Aphid', 'Infected Flea Beetle', 'Infected Pumpkin Beetle', 'Wilting'];
+  const medRisk = ['Insect bite', 'Spotting', 'Yellowing'];
+  
+  if (highRisk.includes(detection)) {
+    return { text: 'High Risk', color: '#e74c3c' };
+  }
+  if (medRisk.includes(detection)) {
+    return { text: 'Medium Risk', color: '#f39c12' };
+  }
+  return { text: 'Good', color: '#27ae60' };
+};
+
+// --- 1. NEW GREETING ALGORITHM ---
+const getGreeting = () => {
+  const currentHour = new Date().getHours();
+  
+  if (currentHour >= 5 && currentHour < 12) {
+    return "Good Morning";
+  } else if (currentHour >= 12 && currentHour < 18) {
+    return "Good Afternoon";
+  } else {
+    return "Good Evening";
+  }
+};
+
 
 const HomeScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
 
-  const quickActions = [
-    { title: 'Insect Detection', icon: '', screen: 'Insect' },
-    { title: 'Crop Monitoring', icon: '', screen: 'Crop' },
-    { title: 'Analytics', icon: '', screen: 'Analytics' },
-    { title: 'Settings', icon: '', screen: 'Settings' },
-  ];
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
+  const [pairedPiId, setPairedPiId] = useState(null);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [stats, setStats] = useState({
+    detectionsToday: 0,
+    activeFields: 1, 
+    cropHealth: '95%',
+  });
+  
+  // --- 2. CALL THE NEW GREETING FUNCTION ---
+  const greeting = getGreeting();
 
-  const recentActivities = [
-    { id: 1, title: 'Detected Aphids in Field A', time: '2 hours ago', status: 'High Risk' },
-    { id: 2, title: 'Crop Health Check Complete', time: '1 day ago', status: 'Good' },
-    { id: 3, title: 'New Detection Alert', time: '3 days ago', status: 'Medium Risk' },
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      setRecentActivities([]);
+      setUserData(null);
+      return;
+    }
+
+    let unsubscribeUser = () => {};
+    let unsubscribeDetections = () => {};
+    let unsubscribeStats = () => {};
+
+    const userDocRef = doc(db, "users", user.uid);
+    unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const newUserData = docSnap.data();
+        setUserData(newUserData);
+        const piId = newUserData.pairedPiId || null;
+        setPairedPiId(piId);
+
+        if (piId) {
+          // 2a. Listener for Recent Activities (Top 5)
+          const recentQuery = query(
+            collection(db, "detections"),
+            where("pi_id", "==", piId),
+            orderBy("timestamp", "desc"),
+            limit(5)
+          );
+          unsubscribeDetections = onSnapshot(recentQuery, (snap) => {
+            const activities = [];
+            snap.forEach(d => activities.push({ id: d.id, ...d.data() }));
+            setRecentActivities(activities);
+            setLoading(false);
+          });
+
+          // 2b. Listener for Stats (Detections Today)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Start of today
+          const startOfToday = Timestamp.fromDate(today);
+
+          const statsQuery = query(
+            collection(db, "detections"),
+            where("pi_id", "==", piId),
+            where("timestamp", ">=", startOfToday)
+          );
+          unsubscribeStats = onSnapshot(statsQuery, (snap) => {
+            setStats(prev => ({ ...prev, detectionsToday: snap.size }));
+          });
+
+        } else {
+          // No Pi ID, so clear everything
+          setRecentActivities([]);
+          setStats(prev => ({ ...prev, detectionsToday: 0 }));
+          setLoading(false);
+        }
+      } else {
+        // User document doesn't exist?
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error("Error listening to user doc:", error);
+      setLoading(false);
+    });
+
+    // Cleanup
+    return () => {
+      unsubscribeUser();
+      unsubscribeDetections();
+      unsubscribeStats();
+    };
+  }, [user]); 
+
+
+  const quickActions = [
+    { title: 'Insect Detection', icon: 'bug', screen: 'Insect' },
+    { title: 'Crop Monitoring', icon: 'leaf', screen: 'Crop' },
+    { title: 'Analytics', icon: 'stats-chart', screen: 'Analytics' },
+    { title: 'Settings', icon: 'settings', screen: 'Settings' },
   ];
 
   return (
@@ -25,31 +164,44 @@ const HomeScreen = ({ navigation }) => {
       resizeMode="cover"
     >
     <ScrollView style={styles.container}>
+      {/* --- 3. UPDATED HEADER TEXT --- */}
       <View style={styles.header}>
         <View>
-          <Text style={[styles.greeting, { color: colors.text }]}>Good Morning!</Text>
+          <Text style={[styles.greeting, { color: colors.text }]}>
+            {greeting}, {userData?.First_Name || 'User'}!
+          </Text>
           <Text style={[styles.userName, { color: colors.text }]}>Welcome to Organic-Eye</Text>
         </View>
-        <TouchableOpacity style={styles.profileButton}>
-          <Image source={require('../../assets/logo.png')} style={styles.profileImage} />
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <Image 
+            source={userData?.avatarUrl ? { uri: userData.avatarUrl } : require('../../assets/logo.png')} 
+            style={styles.profileImage} 
+          />
         </TouchableOpacity>
       </View>
 
+      {/* --- STATS --- */}
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.statNumber, { color: colors.primary }]}>12</Text>
+          <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.activeFields}</Text>
           <Text style={[styles.statLabel, { color: colors.muted }]}>Active Fields</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.statNumber, { color: colors.primary }]}>8</Text>
+          <Text style={[styles.statNumber, { color: colors.primary }]}>
+            {loading ? <ActivityIndicator size="small" /> : stats.detectionsToday}
+          </Text>
           <Text style={[styles.statLabel, { color: colors.muted }]}>Detections Today</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.statNumber, { color: colors.primary }]}>95%</Text>
+          <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.cropHealth}</Text>
           <Text style={[styles.statLabel, { color: colors.muted }]}>Crop Health</Text>
         </View>
       </View>
 
+      {/* --- QUICK ACTIONS --- */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
@@ -59,30 +211,63 @@ const HomeScreen = ({ navigation }) => {
               style={[styles.actionCard, { backgroundColor: colors.card }]}
               onPress={() => navigation.navigate(action.screen)}
             >
-              <Text style={styles.actionIcon}>{action.icon}</Text>
+              <Ionicons name={action.icon} size={32} color={colors.primary} style={styles.actionIcon} />
               <Text style={[styles.actionTitle, { color: colors.text }]}>{action.title}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
+      {/* --- RECENT ACTIVITIES --- */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activities</Text>
         <View style={styles.activitiesList}>
-          {recentActivities.map((activity) => (
-            <View key={activity.id} style={[styles.activityItem, { backgroundColor: colors.card }]}>
-              <View style={styles.activityContent}>
-                <Text style={[styles.activityTitle, { color: colors.text }]}>{activity.title}</Text>
-                <Text style={[styles.activityTime, { color: colors.muted }]}>{activity.time}</Text>
-              </View>
-              <View style={[
-                styles.statusBadge,
-                { backgroundColor: activity.status === 'High Risk' ? '#e74c3c' : activity.status === 'Good' ? '#27ae60' : '#f39c12' }
-              ]}>
-                <Text style={styles.statusText}>{activity.status}</Text>
-              </View>
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : recentActivities.length > 0 ? (
+            recentActivities.map((activity) => {
+              const status = getStatusStyle(activity.detection);
+              return (
+                <TouchableOpacity 
+                  key={activity.id} 
+                  style={[styles.activityItem, { backgroundColor: colors.card }]}
+                  onPress={() => navigation.navigate(
+                    status.text === 'Good' ? 'CropDetails' : 'InsectDetails', 
+                    { item: { id: activity.id, name: activity.detection, img: { uri: activity.imageUrl }, ...activity } }
+                  )}
+                >
+                  <View style={styles.activityContent}>
+                    <Text style={[styles.activityTitle, { color: colors.text }]}>{activity.detection}</Text>
+                    <Text style={[styles.activityTime, { color: colors.muted }]}>
+                      {formatTimeAgo(activity.timestamp)}
+                    </Text>
+                  </View>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: status.color }
+                  ]}>
+                    <Text style={styles.statusText}>{status.text}</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            })
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+              <Ionicons 
+                name={!pairedPiId ? "qr-code-outline" : "analytics-outline"} 
+                size={32} 
+                color={colors.muted} 
+              />
+              <Text style={[styles.emptyText, { color: colors.text }]}>
+                {!pairedPiId ? "No Device Paired" : "No Recent Activity"}
+              </Text>
+              {!pairedPiId && (
+                <Text style={[styles.emptySubText, { color: colors.muted }]}>
+                  Go to Settings to register your IoT device.
+                </Text>
+              )}
             </View>
-          ))}
+          )}
         </View>
       </View>
     </ScrollView>
@@ -90,6 +275,7 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
+// ... (Styles are all perfect, no changes) ...
 const styles = StyleSheet.create({
   bg: { flex: 1 },
   container: {
@@ -107,11 +293,9 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
   },
   userName: {
     fontSize: 16,
-    color: '#e8f5e9',
     marginTop: 4,
   },
   profileButton: {
@@ -119,6 +303,8 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   profileImage: {
     width: '100%',
@@ -132,7 +318,6 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
     padding: 20,
     borderRadius: 15,
     alignItems: 'center',
@@ -145,12 +330,10 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1f7a4f',
     marginBottom: 5,
   },
   statLabel: {
     fontSize: 12,
-    color: '#7f8c8d',
     textAlign: 'center',
   },
   section: {
@@ -160,17 +343,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#ffffff',
     marginBottom: 15,
   },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'space-between',
   },
   actionCard: {
-    width: '48%',
-    backgroundColor: '#ffffff',
+    width: '48%', // Ensures two cards per row
     padding: 20,
     borderRadius: 15,
     alignItems: 'center',
@@ -181,20 +363,17 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   actionIcon: {
-    fontSize: 32,
     marginBottom: 10,
   },
   actionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2c3e50',
     textAlign: 'center',
   },
   activitiesList: {
     gap: 12,
   },
   activityItem: {
-    backgroundColor: '#ffffff',
     padding: 15,
     borderRadius: 10,
     flexDirection: 'row',
@@ -212,22 +391,42 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2c3e50',
     marginBottom: 4,
   },
   activityTime: {
     fontSize: 14,
-    color: '#7f8c8d',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
+    marginLeft: 10,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  emptyCard: {
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    minHeight: 150,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  emptySubText: {
+    fontSize: 14,
+    marginTop: 4,
   },
 });
 

@@ -20,6 +20,7 @@ import ProfileEditScreen from '../screens/ProfileEditScreen';
 import PasswordChangeScreen from '../screens/PasswordChangeScreen';
 import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
 import DetectionSettingsScreen from '../screens/DetectionSettingsScreen';
+import RegisterIoTScreen from '../screens/RegisterIoTScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -126,6 +127,7 @@ export default function AppNavigator() {
             <Stack.Screen name="PasswordChange" component={PasswordChangeScreen} />
             <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
             <Stack.Screen name="DetectionSettings" component={DetectionSettingsScreen} />
+            <Stack.Screen name="RegisterIoT" component={RegisterIoTScreen} />
           </>
         ) : (
           // currentUser is not signed in - show auth screens
