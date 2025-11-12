@@ -28,7 +28,10 @@ const AnalyticsScreen = ({ navigation }) => {
   const { colors } = useTheme();
 
   const [loading, setLoading] = useState(true);
-  const [overviewData, setOverviewData] = useState({ detections: 0, fields: 1, healthScore: 0 });
+  
+  // --- FIX 1: Set default overview stats to 0 ---
+  const [overviewData, setOverviewData] = useState({ detections: 0, fields: 0, healthScore: 0 });
+  
   const [cropHealthChartData, setCropHealthChartData] = useState([]);
   const [insectChartData, setInsectChartData] = useState([]);
   const [insights, setInsights] = useState([]);
@@ -38,8 +41,9 @@ const AnalyticsScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (!user) {
+      // No user, reset everything to 0
       setLoading(false);
-      setOverviewData({ detections: 0, fields: 1, healthScore: 0 });
+      setOverviewData({ detections: 0, fields: 0, healthScore: 0 });
       setCropHealthChartData([]);
       setInsectChartData([]);
       setInsights([]);
@@ -54,6 +58,7 @@ const AnalyticsScreen = ({ navigation }) => {
         const userResult = await UserService.getUserData(user.uid);
 
         if (userResult.success && userResult.userData.pairedPiId) {
+          // --- This user HAS a paired Pi ---
           const piId = userResult.userData.pairedPiId;
 
           const getStartDate = (period) => {
@@ -95,13 +100,13 @@ const AnalyticsScreen = ({ navigation }) => {
               (healthCounts["Wilting"] || 0) +
               (healthCounts["Spotting"] || 0) +
               (healthCounts["Yellowing"] || 0) +
-              (healthCounts["Insect Bite"] || 0);
+              (healthCounts["Insect bite"] || 0); // Corrected "Insect Bite"
             const totalCrops = totalHealthy + totalUnhealthy;
             const healthScore = totalCrops === 0 ? 0 : Math.round((totalHealthy / totalCrops) * 100);
 
             setOverviewData({
               detections: totalDetections,
-              fields: 1,
+              fields: 1, // Set to 1 *only* if Pi is paired
               healthScore: healthScore,
             });
 
@@ -138,7 +143,13 @@ const AnalyticsScreen = ({ navigation }) => {
             setLoading(false);
           });
         } else {
+          // --- FIX 2: User is logged in but has NO paired Pi ---
+          setOverviewData({ detections: 0, fields: 0, healthScore: 0 });
+          setCropHealthChartData([]);
+          setInsectChartData([]);
+          setInsights([]);
           setLoading(false);
+          // --- End of FIX 2 ---
         }
       } catch (error) {
         console.error("Error fetching user data for Analytics:", error);
@@ -150,17 +161,20 @@ const AnalyticsScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [selectedPeriod, user]);
 
+  // --- FIX 3: Updated Color Map to match new labels ---
   const getColorForLabel = (label) => {
     const map = {
-      "Infected Aphids": "#f1c40f",
-      "Infected Flea Beetles": "#2980b9",
-      "Beneficial Ladybug": "#8e44ad",
-      "Infected Squash Beetles": "#e67e22",
-      "Infected Pumpkin Beetles": "#27ae60",
-      "Infected Leaf Miners": "#c0392b",
+      'Beneficial Bee': "#f1c40f",
+      'Beneficial Lacewing Larvae': "#2ecc71",
+      'Beneficial Ladybug': "#e74c3c",
+      'Beneficial Larvae': "#3498db",
+      'Infected Aphid': "#9b59b6",
+      'Infected Flea Beetle': "#e67e22",
+      'Infected Pumpkin Beetle': "#1abc9c",
     };
-    return map[label] || "#ccc";
+    return map[label] || "#ccc"; // Default gray
   };
+  // --- End of FIX 3 ---
 
   const polarToCartesian = (cx, cy, r, angle) => {
     const rad = ((angle - 90) * Math.PI) / 180;

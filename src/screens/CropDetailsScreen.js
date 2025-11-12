@@ -1,16 +1,19 @@
 ﻿import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, TouchableWithoutFeedback, Animated, SafeAreaView, Dimensions 
+  Modal, TouchableOpacity, TouchableWithoutFeedback, Animated, SafeAreaView, Dimensions, 
+  ActivityIndicator // <-- 1. NEW IMPORT
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { getCropInsight } from '../config/LabelMap';
+// --- 2. NEW IMPORTS ---
+import { getCropInsight, INSECT_LABELS } from '../config/LabelMap';
 import * as Speech from 'expo-speech';
-
-// --- MODIFIED IMPORTS ---
-// We REMOVED WebView and added YoutubeIframe
 import YoutubeIframe from 'react-native-youtube-iframe';
-// --- END MODIFIED IMPORTS ---
+import { useAuth } from '../context/AuthContext';
+import { db } from '../../firebase';
+import { collection, query, where, Timestamp, getDocs } from 'firebase/firestore';
+import UserService from '../services/UserService';
+// --- END NEW IMPORTS ---
 
 
 const CropDetailsScreen = ({ route }) => {
@@ -22,12 +25,15 @@ const CropDetailsScreen = ({ route }) => {
   
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
-  
-  // --- NEW STATE: To control the video player ---
   const [playing, setPlaying] = useState(false);
-  // --- END NEW STATE ---
   
   const insight = item ? getCropInsight(item.name) : getCropInsight(null);
+
+  // --- 3. NEW STATE AND HOOKS FOR INSECT TALLY ---
+  const { user } = useAuth(); // Get the current user
+  const [mostLikelyInsect, setMostLikelyInsect] = useState(null); // To store the winner
+  const [isLoadingInsect, setIsLoadingInsect] = useState(false); // For loading spinner
+  // --- END NEW STATE ---
   
   // Stop speech when user leaves the screen
   useEffect(() => {
@@ -36,6 +42,67 @@ const CropDetailsScreen = ({ route }) => {
       setIsSpeaking(false);
     };
   }, []); 
+
+  // --- 4. NEW useEffect: To find the most likely insect for "Insect bite" ---
+  useEffect(() => {
+    const fetchMostLikelyInsect = async () => {
+      // Only run this logic if the detection is "Insect bite" and user is logged in
+      if (item.name !== 'Insect bite' || !user) {
+        return;
+      }
+
+      setIsLoadingInsect(true);
+      try {
+        // 1. Get the user's paired Pi ID
+        const userResult = await UserService.getUserData(user.uid);
+        const piId = userResult?.userData?.pairedPiId;
+        if (!piId) {
+          setIsLoadingInsect(false);
+          return; // No paired Pi, so we can't search
+        }
+
+        // 2. Define time range (e.g., last 7 days)
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
+        const sevenDaysAgoTimestamp = Timestamp.fromDate(sevenDaysAgo);
+
+        // 3. Query for all *insect* detections from this Pi in the last 7 days
+        const q = query(
+          collection(db, "detections"),
+          where("pi_id", "==", piId),
+          where("detection", "in", INSECT_LABELS), // Filter for insects only
+          where("timestamp", ">=", sevenDaysAgoTimestamp) // Filter for last 7 days
+        );
+
+        // 4. Get and tally the documents
+        const querySnapshot = await getDocs(q);
+        const insectCounts = {};
+        querySnapshot.forEach(doc => {
+          const detectionName = doc.data().detection;
+          insectCounts[detectionName] = (insectCounts[detectionName] || 0) + 1;
+        });
+
+        // 5. Find the insect with the highest count (the "majority")
+        let maxCount = 0;
+        let mostFrequent = null;
+        for (const [insect, count] of Object.entries(insectCounts)) {
+          if (count > maxCount) {
+            maxCount = count;
+            mostFrequent = insect;
+          }
+        }
+
+        setMostLikelyInsect(mostFrequent); // This will be null if no insects were found
+      } catch (error) {
+        console.error("Error fetching likely insect:", error);
+      } finally {
+        setIsLoadingInsect(false);
+      }
+    };
+
+    fetchMostLikelyInsect();
+  }, [item, user]); // Re-run if the item or user changes
+  // --- END NEW useEffect ---
 
 
   if (!item) {
@@ -80,11 +147,10 @@ const CropDetailsScreen = ({ route }) => {
     lastTapRef.current = now;
   };
 
-  // --- NEW VIDEO PLAYER HANDLERS ---
+  // --- Video Player Handlers (Unchanged) ---
   const onVideoStateChange = (state) => {
     if (state === 'ended') {
       setPlaying(false);
-      Alert.alert("Video finished!");
     }
   };
 
@@ -92,8 +158,6 @@ const CropDetailsScreen = ({ route }) => {
     setPlaying(false); // Stop the video
     setVideoModalVisible(false); // Close the modal
   };
-  // --- END NEW HANDLERS ---
-
 
   return (
     <ImageBackground
@@ -101,7 +165,6 @@ const CropDetailsScreen = ({ route }) => {
       style={styles.container}
       resizeMode="cover"
     >
-      {/* ... (BrandBar, ScrollView, HeroCard, Details Card are all unchanged) ... */}
       <View style={styles.brandBar}>
         <Text style={[styles.brandText, { color: colors.text }]}>ORGANIC-EYE</Text>
         <View style={[styles.rolePill, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.35)' }]}>
@@ -150,12 +213,33 @@ const CropDetailsScreen = ({ route }) => {
           <Text style={[styles.sourceText, { color: colors.muted }]}>
             {insight.source}
           </Text>
+
+          {/* --- 5. NEW: Most Likely Insect Block --- */}
+          {item.name === 'Insect bite' && (
+            <View style={[styles.likelyInsectBox, { borderColor: colors.primary, backgroundColor: theme === 'dark' ? colors.bg : '#f9f9f9' }]}>
+              <Text style={[styles.likelyInsectTitle, { color: colors.primary }]}>Probable Cause Analysis</Text>
+              {isLoadingInsect ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : mostLikelyInsect ? (
+                <Text style={[styles.likelyInsectText, { color: colors.text }]}>
+                  Based on recent activity from your IoT device, the most likely cause for this damage is: 
+                  <Text style={{ fontWeight: 'bold' }}> {mostLikelyInsect}</Text>.
+                </Text>
+              ) : (
+                <Text style={[styles.likelyInsectText, { color: colors.muted }]}>
+                  No recent insect detections found on your device to suggest a probable cause.
+                </Text>
+              )}
+            </View>
+          )}
+          {/* --- END: Most Likely Insect Block --- */}
+
           {insight.youtubeId && (
             <TouchableOpacity 
               style={[styles.playButton, { backgroundColor: colors.primary }]}
               onPress={() => {
-                setPlaying(true); // Start the video
-                setVideoModalVisible(true); // Open the modal
+                setPlaying(true); 
+                setVideoModalVisible(true);
               }}
             >
               <Text style={styles.playButtonText}>For more info, Play Me ▶️</Text>
@@ -177,15 +261,15 @@ const CropDetailsScreen = ({ route }) => {
               resizeMode="contain"
             />
           </TouchableWithoutFeedback>
-          <Text style={styles.hint}>Tap to close  Double-tap to zoom</Text>
+          <Text style={styles.hint}>Tap to close  Double-tap to zoom</Text>
         </View>
       </Modal>
       
-      {/* --- NEW, REBUILT VIDEO MODAL (Using YoutubeIframe) --- */}
+      {/* ... (Video Modal is unchanged) ... */}
       <Modal
         visible={videoModalVisible}
         animationType="slide"
-        onRequestClose={closeVideoModal} // Use new function
+        onRequestClose={closeVideoModal}
       >
         <SafeAreaView style={[styles.videoModalContainer, { backgroundColor: colors.bg }]}>
           <View style={styles.videoPlayerContainer}>
@@ -199,7 +283,7 @@ const CropDetailsScreen = ({ route }) => {
           </View>
           <TouchableOpacity
             style={[styles.closeButton, { backgroundColor: colors.primary }]}
-            onPress={closeVideoModal} // Use new function
+            onPress={closeVideoModal} 
           >
             <Text style={styles.closeButtonText}>Close Video</Text>
           </TouchableOpacity>
@@ -213,13 +297,11 @@ const CropDetailsScreen = ({ route }) => {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-      {/* --- END NEW --- */}
-
     </ImageBackground>
   );
 };
 
-// --- STYLES (with new additions) ---
+// --- 6. NEW STYLES ---
 const styles = StyleSheet.create({
   container: { flex: 1 },
   brandBar: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -287,17 +369,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   
-  // --- MODIFIED & NEW Video Modal Styles ---
   videoModalContainer: {
     flex: 1,
   },
   videoPlayerContainer: {
-    // This view just holds the player
     width: '100%',
     backgroundColor: '#000',
   },
   videoModalScroll: {
-    flex: 1, // Takes up the rest of the screen
+    flex: 1, 
   },
   closeButton: {
     padding: 15,
@@ -308,7 +388,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // --- END NEW ---
+
+  // --- STYLES FOR NEW "PROBABLE CAUSE" BOX ---
+  likelyInsectBox: {
+    marginTop: 15,
+    padding: 12,
+    borderWidth: 1.5,
+    borderRadius: 8,
+  },
+  likelyInsectTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  likelyInsectText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  // --- END NEW STYLES ---
 });
 
 export default CropDetailsScreen;

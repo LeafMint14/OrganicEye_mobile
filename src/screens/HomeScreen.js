@@ -7,7 +7,6 @@ import { useTheme } from '../theme/ThemeContext';
 
 import { useAuth } from '../context/AuthContext';
 import { db } from '../../firebase';
-// --- FIX: Added 'doc' to the import ---
 import { doc, collection, query, where, orderBy, onSnapshot, limit, Timestamp } from 'firebase/firestore';
 import UserService from '../services/UserService';
 import { Ionicons } from '@expo/vector-icons'; 
@@ -32,7 +31,7 @@ const formatTimeAgo = (timestamp) => {
   return Math.floor(seconds) + " seconds ago";
 };
 
-// Helper function to get risk color
+
 const getStatusStyle = (detection) => {
   const highRisk = ['Infected Aphid', 'Infected Flea Beetle', 'Infected Pumpkin Beetle', 'Wilting'];
   const medRisk = ['Insect bite', 'Spotting', 'Yellowing'];
@@ -46,7 +45,7 @@ const getStatusStyle = (detection) => {
   return { text: 'Good', color: '#27ae60' };
 };
 
-// --- 1. NEW GREETING ALGORITHM ---
+
 const getGreeting = () => {
   const currentHour = new Date().getHours();
   
@@ -62,20 +61,35 @@ const getGreeting = () => {
 
 const HomeScreen = ({ navigation }) => {
   const { theme, colors } = useTheme();
-
   const { user } = useAuth();
+  
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [pairedPiId, setPairedPiId] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
+  
+
+  const [greeting, setGreeting] = useState(getGreeting());
+
+
   const [stats, setStats] = useState({
     detectionsToday: 0,
-    activeFields: 1, 
-    cropHealth: '95%',
+    activeFields: 0, 
+    cropHealth: 'N/A',
   });
   
-  // --- 2. CALL THE NEW GREETING FUNCTION ---
-  const greeting = getGreeting();
+
+  useEffect(() => {
+  
+    const timerId = setInterval(() => {
+      setGreeting(getGreeting());
+    }, 60000); 
+
+   
+    return () => clearInterval(timerId);
+  }, []);
+
+  
 
   useEffect(() => {
     if (!user) {
@@ -98,7 +112,7 @@ const HomeScreen = ({ navigation }) => {
         setPairedPiId(piId);
 
         if (piId) {
-          // 2a. Listener for Recent Activities (Top 5)
+        
           const recentQuery = query(
             collection(db, "detections"),
             where("pi_id", "==", piId),
@@ -112,9 +126,9 @@ const HomeScreen = ({ navigation }) => {
             setLoading(false);
           });
 
-          // 2b. Listener for Stats (Detections Today)
+        
           const today = new Date();
-          today.setHours(0, 0, 0, 0); // Start of today
+          today.setHours(0, 0, 0, 0); 
           const startOfToday = Timestamp.fromDate(today);
 
           const statsQuery = query(
@@ -122,18 +136,27 @@ const HomeScreen = ({ navigation }) => {
             where("pi_id", "==", piId),
             where("timestamp", ">=", startOfToday)
           );
+         
           unsubscribeStats = onSnapshot(statsQuery, (snap) => {
-            setStats(prev => ({ ...prev, detectionsToday: snap.size }));
+            setStats({
+              detectionsToday: snap.size,
+              activeFields: 1, 
+              cropHealth: '95%', 
+            });
           });
 
         } else {
-          // No Pi ID, so clear everything
+       
           setRecentActivities([]);
-          setStats(prev => ({ ...prev, detectionsToday: 0 }));
+          
+          setStats({
+            detectionsToday: 0,
+            activeFields: 0,
+            cropHealth: 'N/A',
+          });
           setLoading(false);
         }
       } else {
-        // User document doesn't exist?
         setLoading(false);
       }
     }, (error) => {
@@ -141,7 +164,7 @@ const HomeScreen = ({ navigation }) => {
       setLoading(false);
     });
 
-    // Cleanup
+ 
     return () => {
       unsubscribeUser();
       unsubscribeDetections();
@@ -164,9 +187,10 @@ const HomeScreen = ({ navigation }) => {
       resizeMode="cover"
     >
     <ScrollView style={styles.container}>
-      {/* --- 3. UPDATED HEADER TEXT --- */}
+   
       <View style={styles.header}>
         <View>
+      
           <Text style={[styles.greeting, { color: colors.text }]}>
             {greeting}, {userData?.First_Name || 'User'}!
           </Text>
@@ -201,7 +225,7 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* --- QUICK ACTIONS --- */}
+  
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
@@ -218,7 +242,7 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* --- RECENT ACTIVITIES --- */}
+   
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activities</Text>
         <View style={styles.activitiesList}>
@@ -277,157 +301,157 @@ const HomeScreen = ({ navigation }) => {
 
 // ... (Styles are all perfect, no changes) ...
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  userName: {
-    fontSize: 16,
-    marginTop: 4,
-  },
-  profileButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 30,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  statLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  actionCard: {
-    width: '48%', // Ensures two cards per row
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  actionIcon: {
-    marginBottom: 10,
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  activitiesList: {
-    gap: 12,
-  },
-  activityItem: {
-    padding: 15,
-    borderRadius: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  bg: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  header: {
+    flexDirection: 'row',
+  justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  greeting: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  userName: {
+    fontSize: 16,
+    marginTop: 4,
+  },
+  profileButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 30,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  statLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  actionCard: {
+    width: '48%', // Ensures two cards per row
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  actionIcon: {
+    marginBottom: 10,
+  },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  activitiesList: {
+    gap: 12,
+  },
+  activityItem: {
+    padding: 15,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  activityTime: {
-    fontSize: 14,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginLeft: 10,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  emptyCard: {
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    minHeight: 150,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 10,
-  },
-  emptySubText: {
-    fontSize: 14,
-    marginTop: 4,
-  },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+ marginBottom: 4,
+  },
+  activityTime: {
+    fontSize: 14,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginLeft: 10,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  emptyCard: {
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    minHeight: 150,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  emptySubText: {
+    fontSize: 14,
+    marginTop: 4,
+  },
 });
 
 export default HomeScreen;
