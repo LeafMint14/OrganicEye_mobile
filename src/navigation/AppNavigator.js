@@ -122,7 +122,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="InsectDetails" component={InsectDetailsScreen} />
-            <Stack.Screen name="CropDetails" component={CropDetailsScreen} />
+            <Stack.Screen name="CropDetailsScreen" component={CropDetailsScreen} />
             <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
             <Stack.Screen name="PasswordChange" component={PasswordChangeScreen} />
             <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />

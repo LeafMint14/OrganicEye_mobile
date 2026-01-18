@@ -1,31 +1,34 @@
 ﻿import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, TouchableWithoutFeedback, Animated, SafeAreaView, Dimensions 
+  Modal, TouchableOpacity, Animated, SafeAreaView 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-// --- 1. NEW IMPORTS ---
-import { getInsectInsight } from '../config/LabelMap'; // <-- Use the new function
+import { getInsectInsight } from '../config/LabelMap'; 
 import * as Speech from 'expo-speech';
-import YoutubeIframe from 'react-native-youtube-iframe';
-// --- END NEW IMPORTS ---
+import { Ionicons } from '@expo/vector-icons';
+import YoutubeIframe from 'react-native-youtube-iframe'; // Ensure this is installed
 
-const InsectDetailsScreen = ({ route }) => {
+const InsectDetailsScreen = ({ route, navigation }) => {
   const { item } = route.params || {};
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const scale = useRef(new Animated.Value(1)).current;
-  const lastTapRef = useRef(0);
-  const { theme, colors } = useTheme();
+  
+  // --- FIX 1: DATA MAPPING ---
+  // We check for both 'detection' (IoT) and 'name' (Manual/Legacy)
+  const insectName = item?.detection || item?.name || "Unknown";
+  const insectScore = item?.score || item?.confidence || 0;
+  // --- FIX 2: IMAGE URL HANDLING ---
+  const insectImage = item?.imageUrl || item?.img || null;
 
-  // --- 2. NEW STATE FOR FEATURES ---
+  const [previewVisible, setPreviewVisible] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
   const [playing, setPlaying] = useState(false);
   
-  // --- 3. GET DATA FROM THE NEW FUNCTION ---
-  const insight = item ? getInsectInsight(item.name) : getInsectInsight(null);
-  
-  // Stop speech when user leaves the screen
+  const insight = getInsectInsight(insectName);
+  const isBeneficial = insectName.toLowerCase().includes('beneficial') || 
+                       insectName.toLowerCase().includes('bee') || 
+                       insectName.toLowerCase().includes('ladybug');
+
   useEffect(() => {
     return () => {
       Speech.stop();
@@ -35,13 +38,12 @@ const InsectDetailsScreen = ({ route }) => {
 
   if (!item) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Text>No insect selected.</Text>
+      <View style={styles.centerError}>
+        <Text style={{color: '#64748B'}}>No insect data found.</Text>
       </View>
     );
   }
 
-  // --- 4. NEW HELPER FUNCTIONS ---
   const startReading = () => {
     const textToSpeak = `${insight.title}. ${insight.description}`;
     setIsSpeaking(true);
@@ -49,7 +51,6 @@ const InsectDetailsScreen = ({ route }) => {
       language: 'en-US',
       onDone: () => setIsSpeaking(false),
       onStopped: () => setIsSpeaking(false),
-      onError: () => setIsSpeaking(false),
     });
   };
 
@@ -57,261 +58,164 @@ const InsectDetailsScreen = ({ route }) => {
     Speech.stop();
     setIsSpeaking(false);
   };
-  
-  const onVideoStateChange = (state) => {
-    if (state === 'ended') {
-      setPlaying(false);
-    }
-  };
-
-  const closeVideoModal = () => {
-    setPlaying(false); 
-    setVideoModalVisible(false);
-  };
-  // --- END NEW FUNCTIONS ---
-
-  // --- Image Modal Handlers (Unchanged) ---
-  const openPreview = () => {
-    setPreviewVisible(true);
-    scale.setValue(1);
-  };
-
-  const closePreview = () => {
-    setPreviewVisible(false);
-    scale.setValue(1);
-  };
-
-  const handlePreviewTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 250) {
-      Animated.spring(scale, {
-        toValue: Math.abs(scale.__getValue() - 1) < 0.1 ? 2 : 1,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 80,
-      }).start();
-    }
-    lastTapRef.current = now;
-  };
 
   return (
-    <ImageBackground
-      source={require('../../assets/backgroundimage.png')}
-      style={styles.container}
-      resizeMode="cover"
-    >
-      {/* --- BrandBar (Unchanged) --- */}
-      <View style={styles.brandBar}>
-        <Text style={[styles.brandText, { color: colors.text }]}>ORGANIC-EYE</Text>
-        <View style={[styles.rolePill, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.35)' }]}>
-          <Text style={styles.roleDot}></Text>
-          <Text style={[styles.roleText, { color: colors.text }]}>Farmer</Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-        {/* --- HeroCard (Unchanged) --- */}
-        <View style={[styles.heroCard, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.15)' }]}>
-          <TouchableOpacity activeOpacity={0.8} onPress={openPreview}>
-            <Image source={item.img} style={styles.heroImage} resizeMode="cover" />
+    <ImageBackground source={require('../../assets/backgroundimage.png')} style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }}>
+        
+        {/* HEADER */}
+        <View style={styles.brandBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={28} color="#1B4332" />
           </TouchableOpacity>
-          <Text style={[styles.heroTitle, { color: colors.text }]}>{(item.name || '').toUpperCase()}</Text>
+          <Text style={styles.brandText}>INSECT REPORT</Text>
+          <View style={{ width: 28 }} /> 
         </View>
 
-        {/* --- Details Card (Unchanged) --- */}
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sheetTitle, { color: colors.text }]}>DETAILS</Text>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Date :</Text><Text style={[styles.value, { color: colors.text }]}> {item.timestamp ? item.timestamp.toDate().toLocaleDateString() : 'N/A'}</Text></View>
-          <View style={styles.rowMulti}><Text style={[styles.label, { color: colors.text }]}>Status :</Text><Text style={[styles.value, { color: colors.text }]}> {item.name}</Text></View>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Confidence level :</Text><Text style={[styles.value, { color: colors.text }]}> {item.confidence}%</Text></View>
-          <View style={styles.row}><Text style={[styles.label, { color: colors.text }]}>Time :</Text><Text style={[styles.value, { color: colors.text }]}> {item.timestamp ? item.timestamp.toDate().toLocaleTimeString() : 'N/A'}</Text></View>
-        </View>
-
-        {/* --- 5. NEW SUGGESTIONS CARD --- */}
-        <View style={[styles.sheet, { backgroundColor: colors.card, marginTop: 14 }]}>
-          <View style={styles.sheetTitleContainer}>
-            <Text style={[styles.sheetTitle, { color: colors.text, flex: 1 }]}>INFORMATION</Text>
-            <TouchableOpacity 
-              style={[styles.listenButton, { backgroundColor: colors.primary }]}
-              onPress={isSpeaking ? stopReading : startReading}
-            >
-              <Text style={styles.listenButtonText}>
-                {isSpeaking ? 'Stop 🤫' : 'Listen 🔊'}
-              </Text>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          
+          {/* HERO IMAGE SECTION */}
+          <View style={styles.heroSection}>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewVisible(true)} style={styles.imageFrame}>
+              {/* --- FIX 3: CORRECT IMAGE SOURCE SYNTAX --- */}
+              {insectImage ? (
+                  <Image source={{ uri: insectImage }} style={styles.heroImage} />
+              ) : (
+                  <View style={[styles.heroImage, {backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center'}]}>
+                      <Ionicons name="image-outline" size={50} color="#fff"/>
+                  </View>
+              )}
+              
+              <View style={[styles.badge, { backgroundColor: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
+                <Text style={styles.badgeText}>{isBeneficial ? 'BENEFICIAL' : 'PEST'}</Text>
+              </View>
             </TouchableOpacity>
           </View>
-          <Text style={[
-            styles.insightTitle, 
-            { color: item.name.includes('Beneficial') ? '#2ecc71' : colors.primary }
-          ]}>
-            {insight.title}
-          </Text>
-          <Text style={[styles.insightDescription, { color: colors.text }]}>
-            {insight.description}
-          </Text>
-          <Text style={[styles.sourceText, { color: colors.muted }]}>
-            {insight.source}
-          </Text>
-          {insight.youtubeId && (
-            <TouchableOpacity 
-              style={[styles.playButton, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                setPlaying(true); 
-                setVideoModalVisible(true);
-              }}
-            >
-              <Text style={styles.playButtonText}>For more info, Play Me ▶️</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </ScrollView>
 
-      {/* --- Image Preview Modal (Unchanged) --- */}
-      <Modal visible={previewVisible} transparent animationType="fade" onRequestClose={closePreview}>
-        <View style={styles.modalBackdrop}>
-          <TouchableWithoutFeedback onPress={closePreview}>
-            <View style={styles.modalBackdropTouchable} />
-          </TouchableWithoutFeedback>
-          <TouchableWithoutFeedback onPress={handlePreviewTap}>
-            <Animated.Image
-              source={item.img}
-              style={[styles.previewImage, { transform: [{ scale }] }]}
-              resizeMode="contain"
-            />
-          </TouchableWithoutFeedback>
-          <Text style={styles.hint}>Tap to close  Double-tap to zoom</Text>
-        </View>
-      </Modal>
-
-      {/* --- 6. NEW VIDEO MODAL --- */}
-      <Modal
-        visible={videoModalVisible}
-        animationType="slide"
-        onRequestClose={closeVideoModal}
-      >
-        <SafeAreaView style={[styles.videoModalContainer, { backgroundColor: colors.bg }]}>
-          <View style={styles.videoPlayerContainer}>
-            <YoutubeIframe
-              height={300}
-              width={Dimensions.get('window').width}
-              play={playing}
-              videoId={insight.youtubeId}
-              onChangeState={onVideoStateChange}
-            />
+          {/* QUICK STATS SHEET */}
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>DETECTION SUMMARY</Text>
+            <View style={styles.infoGrid}>
+              <View style={styles.infoRow}>
+                <Ionicons name="bug" size={18} color="#64748B" />
+                <Text style={styles.label}>Identity:</Text>
+                <Text style={[styles.value, { fontWeight: '800', color: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
+                   {insectName}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="analytics" size={18} color="#64748B" />
+                <Text style={styles.label}>Confidence:</Text>
+                <Text style={styles.value}>{insectScore}%</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="calendar" size={18} color="#64748B" />
+                <Text style={styles.label}>Detected:</Text>
+                <Text style={styles.value}>
+                    {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleDateString() : 'Just now'}
+                </Text>
+              </View>
+            </View>
           </View>
-          <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: colors.primary }]}
-            onPress={closeVideoModal}
-          >
-            <Text style={styles.closeButtonText}>Close Video</Text>
-          </TouchableOpacity>
-          <ScrollView style={styles.videoModalScroll}>
-            <Text style={[styles.insightTitle, { color: colors.text, padding: 16 }]}>
+
+          {/* AI INSIGHTS SHEET */}
+          <View style={[styles.sheet, { marginTop: 15 }]}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>AI INSIGHTS</Text>
+              <TouchableOpacity 
+                style={[styles.listenButton, { backgroundColor: isSpeaking ? '#BC4749' : '#1B4332' }]}
+                onPress={isSpeaking ? stopReading : startReading}
+              >
+                <Ionicons name={isSpeaking ? "stop" : "volume-medium"} size={16} color="#FFF" />
+                <Text style={styles.listenButtonText}>{isSpeaking ? 'Stop' : 'Listen'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.insightTitle, { color: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
               {insight.title}
             </Text>
-            <Text style={[styles.insightDescription, { color: colors.text, paddingHorizontal: 16 }]}>
-              {insight.description}
-            </Text>
-          </ScrollView>
-        </SafeAreaView>
+            <Text style={styles.insightDescription}>{insight.description}</Text>
+            <Text style={styles.sourceText}>{insight.source}</Text>
+
+            {insight.youtubeId && (
+              <TouchableOpacity 
+                style={styles.playButton}
+                onPress={() => { setPlaying(true); setVideoModalVisible(true); }}
+              >
+                <Ionicons name="logo-youtube" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.playButtonText}>Watch Educational Video</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* VIDEO MODAL */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={videoModalVisible}
+        onRequestClose={() => { setVideoModalVisible(false); setPlaying(false); }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.videoWrapper}>
+            <YoutubeIframe
+              height={220}
+              play={playing}
+              videoId={insight.youtubeId}
+            />
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={() => { setVideoModalVisible(false); setPlaying(false); }}
+            >
+              <Text style={styles.closeButtonText}>Close Video</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
+
+      {/* IMAGE PREVIEW MODAL */}
+      <Modal visible={previewVisible} transparent={true} onRequestClose={() => setPreviewVisible(false)}>
+        <View style={styles.modalContainer}>
+            <TouchableOpacity style={{position: 'absolute', top: 40, right: 20, zIndex: 10}} onPress={() => setPreviewVisible(false)}>
+                <Ionicons name="close-circle" size={40} color="#FFF"/>
+            </TouchableOpacity>
+            {insectImage && <Image source={{ uri: insectImage }} style={{width: '100%', height: 400, resizeMode: 'contain'}} />}
+        </View>
+      </Modal>
+
     </ImageBackground>
   );
 };
 
-// --- 7. NEW AND UPDATED STYLES ---
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  brandBar: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  brandText: { color: '#E9F5EC', fontWeight: '800', letterSpacing: 2, fontSize: 16 },
-  rolePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
-  roleDot: { color: '#F6C453', marginRight: 6 },
-  roleText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  heroCard: { marginHorizontal: 16, marginTop: 10, backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 18, padding: 16 },
-  heroImage: { width: '100%', height: 160, borderRadius: 12, marginBottom: 12 },
-  heroTitle: { textAlign: 'center', fontWeight: '800', color: '#0b3010', fontSize: 16 },
-  sheet: { marginTop: 14, marginHorizontal: 16, backgroundColor: '#ffffff', borderRadius: 18, padding: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6 },
-  
-  // Updated from old sheetTitle style
-  sheetTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sheetTitle: { 
-    textAlign: 'center', 
-    fontSize: 18, 
-    fontWeight: '900',
-    // Removed marginBottom
-  },
-  // ---
-  
-  row: { flexDirection: 'row', marginBottom: 10 },
-  rowMulti: { marginBottom: 10 },
-  label: { fontWeight: '800', color: '#111' },
-  value: { color: '#111' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
-  modalBackdropTouchable: { ...StyleSheet.absoluteFillObject },
-  previewImage: { width: '90%', height: '70%' },
-  hint: { color: '#fff', opacity: 0.7, marginTop: 12 },
-  
-  // --- All these styles are new for this screen ---
-  listenButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  listenButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  insightTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  insightDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sourceText: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    textAlign: 'right',
-    marginTop: 10,
-  },
-  playButton: {
-    marginTop: 15,
-    paddingVertical: 10,
-    borderRadius: 25,
-    alignItems: 'center',
-  },
-  playButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  videoModalContainer: {
-    flex: 1,
-  },
-  videoPlayerContainer: {
-    width: '100%',
-    backgroundColor: '#000',
-  },
-  videoModalScroll: {
-    flex: 1, 
-  },
-  closeButton: {
-    padding: 15,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  centerError: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  brandBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  brandText: { fontWeight: '900', letterSpacing: 2, fontSize: 16, color: '#1B4332' },
+  heroSection: { paddingHorizontal: 16, marginTop: 10 },
+  imageFrame: { width: '100%', height: 220, borderRadius: 25, overflow: 'hidden', elevation: 10, backgroundColor: '#000' },
+  heroImage: { width: '100%', height: '100%', opacity: 0.9, resizeMode: 'cover' },
+  badge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  badgeText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
+  sheet: { marginHorizontal: 16, backgroundColor: '#FFF', borderRadius: 25, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  sheetTitle: { fontSize: 13, fontWeight: '800', color: '#94A3B8', letterSpacing: 1 },
+  infoGrid: { marginTop: 5 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  label: { marginLeft: 10, fontSize: 14, color: '#64748B', width: 90 },
+  value: { fontSize: 14, color: '#1E293B', flex: 1 },
+  insightTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  insightDescription: { fontSize: 15, color: '#475569', lineHeight: 22 },
+  sourceText: { fontSize: 11, fontStyle: 'italic', color: '#94A3B8', marginTop: 15, textAlign: 'right' },
+  listenButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 },
+  listenButtonText: { color: '#FFF', fontWeight: '800', fontSize: 12, marginLeft: 5 },
+  playButton: { marginTop: 20, backgroundColor: '#BC4749', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 15 },
+  playButtonText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
+  modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
+  videoWrapper: { backgroundColor: '#000', paddingVertical: 20 },
+  closeButton: { alignSelf: 'center', marginTop: 20, padding: 10 },
+  closeButtonText: { color: '#FFF', fontWeight: 'bold' }
 });
 
 export default InsectDetailsScreen;

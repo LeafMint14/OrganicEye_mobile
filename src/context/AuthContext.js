@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import  AuthService  from '../services/AuthService';
+import AuthService from '../services/AuthService';
 
 const AuthContext = createContext();
 
-// Custom hook to use the auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -16,38 +15,32 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Signup function
   const signup = async (email, password, First_Name, Last_Name, contact) => {
     return await AuthService.register(email, password, First_Name, Last_Name, contact);
   };
 
-  // Login function
+  // --- UPDATED LOGIN (Removed logs) ---
   const login = async (email, password) => {
-    console.log('AuthContext: Login attempt for:', email);
-    const result = await AuthService.login(email, password);
-    console.log('AuthContext: Login result:', result.success ? 'success' : 'failed');
-    return result;
+    // We just return the result; the LoginScreen will handle showing the Alert
+    return await AuthService.login(email, password);
   };
 
-  // Logout function
   const logout = async () => {
     return await AuthService.logout();
   };
 
-  // Reset password function
   const resetPassword = async (email) => {
     return await AuthService.resetPassword(email);
   };
 
-  // Change password function
   const changePassword = async (currentPassword, newPassword) => {
     return await AuthService.changePassword(currentPassword, newPassword);
   };
 
   useEffect(() => {
-    console.log('AuthContext: Setting up auth state listener');
+    // Removed setup log
     const unsubscribe = AuthService.onAuthStateChange((user) => {
-      console.log('AuthContext: Auth state changed, user:', user ? user.email : 'null');
+      // Removed "Auth state changed" log to keep console clean
       setUser(user);
       setLoading(false);
     });
