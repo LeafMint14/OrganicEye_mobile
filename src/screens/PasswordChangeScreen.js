@@ -53,24 +53,10 @@ const PasswordChangeScreen = ({ navigation }) => {
     }
 
     // --- NEW POLICY CHECKS ---
-    if (newPassword.length < 12) {
-      Alert.alert('Error', 'New password must be at least 12 characters long');
-      return false;
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      Alert.alert('Error', 'New password must contain at least one lowercase letter');
-      return false;
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      Alert.alert('Error', 'New password must contain at least one uppercase letter');
-      return false;
-    }
-    if (!/\d/.test(newPassword)) {
-      Alert.alert('Error', 'New password must contain at least one number');
-      return false;
-    }
-    if (!/[^A-Za-z0-9]/.test(newPassword)) {
-      Alert.alert('Error', 'New password must contain at least one special character (e.g., !@#$)');
+    // Validate new password: exactly 8 alphanumeric characters
+    const passwordRegex = /^[a-zA-Z0-9]{8}$/;
+    if (!passwordRegex.test(newPassword)) {
+      Alert.alert('Error', 'New password must be exactly 8 letters and/or numbers only');
       return false;
     }
     // --- END NEW POLICY ---

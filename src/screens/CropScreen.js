@@ -9,6 +9,7 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
+import { processDetectionAlert } from '../services/NotificationService';
 
 const CropScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -17,7 +18,8 @@ const CropScreen = ({ navigation }) => {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]); 
   const { user } = useAuth(); 
-  const [pairedPiId, setPairedPiId] = useState(null); 
+  const [pairedPiId, setPairedPiId] = useState(null);
+  const [processedDetections, setProcessedDetections] = useState(new Set()); 
 
   useEffect(() => {
     if (!user) {
@@ -60,6 +62,28 @@ const CropScreen = ({ navigation }) => {
             });
             setItems(detectionsData); 
             setLoading(false);
+
+            // Process alerts for new detections
+            querySnapshot.docChanges().forEach((change) => {
+              if (change.type === 'added') {
+                const doc = change.doc;
+                const data = doc.data();
+                const detectionId = doc.id;
+
+                // Only process if we haven't seen this detection before
+                if (!processedDetections.has(detectionId)) {
+                  setProcessedDetections(prev => new Set([...prev, detectionId]));
+                  
+                  // Process alert for new detection
+                  const detection = {
+                    type: 'crop',
+                    detection: data.detection || data.primary || "Analysis",
+                    confidence: data.score || 0,
+                  };
+                  processDetectionAlert(detection, user.uid);
+                }
+              }
+            });
           }, (error) => {
              console.error("Query Error:", error);
              setLoading(false);

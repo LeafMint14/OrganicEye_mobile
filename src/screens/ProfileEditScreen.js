@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker'; 
+import Constants from 'expo-constants';
 
 // --- Helper function to upload the image ---
 const uploadImageToCloudinary = async (localUri) => {
@@ -115,6 +116,19 @@ const ProfileEditScreen = ({ navigation }) => {
 
   
   const pickImage = async () => {
+    // Check if running in Expo Go on Android (media library access is limited)
+    const isExpoGoAndroid = Constants.appOwnership === 'expo' && Constants.platform?.android;
+    
+    if (isExpoGoAndroid) {
+      Alert.alert(
+        'Limited Media Access',
+        'Due to Android permission changes, Expo Go has limited access to the media library. For full functionality, please use a development build.\n\nLearn more: https://docs.expo.dev/develop/development-builds/create-a-build',
+        [
+          { text: 'OK' }
+        ]
+      );
+      return;
+    }
    
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {

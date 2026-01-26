@@ -9,8 +9,8 @@ import {
   Alert, 
   ImageBackground, 
   ActivityIndicator,
-  Slider
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useTheme } from '../theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -269,7 +269,7 @@ const DetectionSettingsScreen = ({ navigation }) => {
                 onValueChange={(value) => handleSliderChange('detectionThreshold', value)}
                 minimumTrackTintColor={colors.primary}
                 maximumTrackTintColor="#e0e0e0"
-                thumbStyle={{ backgroundColor: colors.primary }}
+                thumbTintColor={colors.primary}
               />
             </View>
 
@@ -291,7 +291,7 @@ const DetectionSettingsScreen = ({ navigation }) => {
                 onValueChange={(value) => handleSliderChange('detectionInterval', Math.round(value))}
                 minimumTrackTintColor={colors.primary}
                 maximumTrackTintColor="#e0e0e0"
-                thumbStyle={{ backgroundColor: colors.primary }}
+                thumbTintColor={colors.primary}
               />
             </View>
 
@@ -313,7 +313,7 @@ const DetectionSettingsScreen = ({ navigation }) => {
                 onValueChange={(value) => handleSliderChange('maxDetectionsPerDay', Math.round(value))}
                 minimumTrackTintColor={colors.primary}
                 maximumTrackTintColor="#e0e0e0"
-                thumbStyle={{ backgroundColor: colors.primary }}
+                thumbTintColor={colors.primary}
               />
             </View>
           </View>
