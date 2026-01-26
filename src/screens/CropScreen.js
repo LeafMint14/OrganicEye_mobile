@@ -34,13 +34,12 @@ const CropScreen = ({ navigation }) => {
           const piId = userResult.userData.pairedPiId;
           setPairedPiId(piId); 
 
-          // --- ðŸ”’ STRICT FILTERING FOR CROP DATA ---
-          // This query ensures ONLY: Healthy, Wilting, Yellowing, Spotting, Insect Bite
-          // appear here. Real insects will be ignored.
+          // --- 🟢 FIX APPLIED HERE ---
+          // Python sends "Crop Analysis", so we must query for that exact string.
           const q = query(
             collection(db, "detections"),
             where("pi_id", "==", piId),
-            where("type", "==", "Crop"), // <--- THE KEY FILTER
+            where("type", "==", "Crop Analysis"), // <--- CHANGED FROM "Crop"
             orderBy("timestamp", "desc")
           );
 
@@ -51,7 +50,6 @@ const CropScreen = ({ navigation }) => {
               if (data.imageUrl) {
                 detectionsData.push({
                   id: doc.id,
-                  // Use 'detection' or 'primary' to get the disease name (e.g. "Wilting")
                   detection: data.detection || data.primary || "Analysis",
                   score: data.score || 0,
                   imageUrl: data.imageUrl, 
@@ -78,7 +76,7 @@ const CropScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [user]); 
 
-  // --- SELECTION & DELETE LOGIC (Same as InsectScreen) ---
+  // --- SELECTION & DELETE LOGIC ---
   const toggleSelect = (id) => {
     if (selectedItems.includes(id)) {
       setSelectedItems(prev => prev.filter(item => item !== id));
@@ -139,13 +137,12 @@ const CropScreen = ({ navigation }) => {
           if (isSelectMode) {
             toggleSelect(item.id);
           } else {
-            // Navigate to Details
             navigation.navigate('CropDetailsScreen', { 
               item: {
                 id: item.id,
                 diagnosis: item.detection,
                 healthScore: item.score,
-                img: { uri: item.imageUrl }, // Wrap strictly for legacy details screen
+                img: { uri: item.imageUrl }, 
                 timestamp: item.timestamp,
               }
             });
@@ -169,7 +166,7 @@ const CropScreen = ({ navigation }) => {
               {item.detection}
             </Text>
             <Text style={styles.cardTime}>
-              {item.timestamp?.toDate().toLocaleDateString()} â€¢ Health Score: {item.score}/100
+              {item.timestamp?.toDate().toLocaleDateString()} • Health Score: {item.score}/100
             </Text>
           </View>
 
