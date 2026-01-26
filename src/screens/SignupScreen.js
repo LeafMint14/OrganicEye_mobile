@@ -33,25 +33,10 @@ const SignupScreen = ({ navigation }) => {
       return;
     }
 
-    // New Policy Checks
-    if (password.length < 12) {
-      Alert.alert('Error', 'Password must be at least 12 characters long');
-      return;
-    }
-    if (!/[a-z]/.test(password)) {
-      Alert.alert('Error', 'Password must contain at least one lowercase letter');
-      return;
-    }
-    if (!/[A-Z]/.test(password)) {
-      Alert.alert('Error', 'Password must contain at least one uppercase letter');
-      return;
-    }
-    if (!/\d/.test(password)) {
-      Alert.alert('Error', 'Password must contain at least one number');
-      return;
-    }
-    if (!/[^A-Za-z0-9]/.test(password)) {
-      Alert.alert('Error', 'Password must contain at least one special character (e.g., !@#$)');
+    // Validate password: exactly 8 alphanumeric characters
+    const passwordRegex = /^[a-zA-Z0-9]{8}$/;
+    if (!passwordRegex.test(password)) {
+      Alert.alert('Error', 'Password must be exactly 8 letters and/or numbers only');
       return;
     }
     // --- END UPDATED VALIDATION BLOCK ---
@@ -211,21 +196,6 @@ const SignupScreen = ({ navigation }) => {
               <Text style={styles.signupButtonText}>Sign Up</Text>
             )}
           </TouchableOpacity>
-
-          <View style={styles.dividerRow}>
-            <View style={[styles.divider, { backgroundColor: colors.muted }]} />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>Or Continue With</Text>
-            <View style={[styles.divider, { backgroundColor: colors.muted }]} />
-          </View>
-
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: colors.card }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: colors.primary }]}>G</Text>
-            </TouchableOpacity>
-            {/* <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: '#fff' }]}>f</Text>
-            </TouchableOpacity> */}
-          </View>
 
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.muted }]}>Already have an account? </Text>

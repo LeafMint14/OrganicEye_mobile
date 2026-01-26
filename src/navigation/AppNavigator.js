@@ -16,11 +16,13 @@ import CropDetailsScreen from '../screens/CropDetailsScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import InsectDetailsScreen from '../screens/InsectDetailsScreen';
+import DetectionHistoryScreen from '../screens/DetectionHistoryScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import PasswordChangeScreen from '../screens/PasswordChangeScreen';
 import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
 import DetectionSettingsScreen from '../screens/DetectionSettingsScreen';
 import RegisterIoTScreen from '../screens/RegisterIoTScreen';
+import AlertThresholdsScreen from '../screens/AlertThresholdsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -123,10 +125,12 @@ export default function AppNavigator() {
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="InsectDetails" component={InsectDetailsScreen} />
             <Stack.Screen name="CropDetailsScreen" component={CropDetailsScreen} />
+            <Stack.Screen name="DetectionHistory" component={DetectionHistoryScreen} />
             <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
             <Stack.Screen name="PasswordChange" component={PasswordChangeScreen} />
             <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
             <Stack.Screen name="DetectionSettings" component={DetectionSettingsScreen} />
+            <Stack.Screen name="AlertThresholds" component={AlertThresholdsScreen} />
             <Stack.Screen name="RegisterIoT" component={RegisterIoTScreen} />
           </>
         ) : (
