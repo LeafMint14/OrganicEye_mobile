@@ -92,6 +92,7 @@ const SettingsScreen = ({ navigation }) => {
         { name: 'Alert Thresholds', icon: 'notifications-outline', action: 'alerts' },
         // { name: 'Field Management', icon: 'leaf-outline', action: 'fields' },
         { name: 'Detection History', icon: 'time-outline', action: 'history' },
+        { name: 'Analytics Module', icon: 'analytics-outline', action: 'analytics' },
       ]
     },
     // {
@@ -151,14 +152,7 @@ const SettingsScreen = ({ navigation }) => {
         navigation.navigate('DetectionSettings');
         break;
       case 'alerts':
-        Alert.alert(
-          'Alert Thresholds',
-          'Alert configuration will be implemented here',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Configure', onPress: () => console.log('Navigate to alert settings') }
-          ]
-        );
+        navigation.navigate('AlertThresholds');
         break;
       case 'fields':
         Alert.alert(
@@ -171,14 +165,10 @@ const SettingsScreen = ({ navigation }) => {
         );
         break;
       case 'history':
-        Alert.alert(
-          'Detection History',
-          'Detection history will be implemented here',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'View', onPress: () => console.log('Navigate to detection history') }
-          ]
-        );
+        navigation.navigate('DetectionHistory');
+        break;
+      case 'analytics':
+        navigation.navigate('Analytics');
         break;
       case 'export':
         Alert.alert(

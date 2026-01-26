@@ -2,18 +2,28 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { theme, colors } = useTheme();
   const { login, resetPassword } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    // Validate password: exactly 8 alphanumeric characters
+    const passwordRegex = /^[a-zA-Z0-9]{8}$/;
+    if (!passwordRegex.test(password)) {
+      Alert.alert('Error', 'Password must be exactly 8 letters and/or numbers only');
       return;
     }
 
@@ -41,6 +51,15 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setResetLoading(true);
+
     try {
       const result = await resetPassword(email);
       if (result.success) {
@@ -50,6 +69,8 @@ const LoginScreen = ({ navigation }) => {
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to send password reset email');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -95,10 +116,13 @@ const LoginScreen = ({ navigation }) => {
               value={password}
               onChangeText={setPassword}
               placeholder="Password"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               placeholderTextColor={colors.muted}
               editable={!loading}
             />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+              <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color={colors.muted} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.rowBetween}>
@@ -106,8 +130,10 @@ const LoginScreen = ({ navigation }) => {
               <View style={[styles.checkbox, remember && styles.checkboxChecked]} />
               <Text style={[styles.rememberText, { color: colors.text }]}>Remember me</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleForgotPassword} disabled={loading}>
-              <Text style={[styles.forgotText, { color: '#FFFFFF',  fontWeight: 'bold'  }]}>Forget Password?</Text>
+            <TouchableOpacity onPress={handleForgotPassword} disabled={loading || resetLoading}>
+              <Text style={[styles.forgotText, { color: '#FFFFFF',  fontWeight: 'bold'  }]}>
+                {resetLoading ? 'Sending...' : 'Forget Password?'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -122,21 +148,6 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.loginButtonText}>Log In</Text>
             )}
           </TouchableOpacity>
-
-          <View style={styles.dividerRow}>
-            <View style={[styles.divider, { backgroundColor: '#FFFFFF' }]} />
-            <Text style={[styles.dividerText, { color: '#FFFFFF',  fontWeight: 'bold' }]}>Or Continue With</Text>
-            <View style={[styles.divider, { backgroundColor: '#FFFFFF' }]} />
-          </View>
-
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#DB4437' }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: '#2bff00ff',  fontWeight: 'bold' }]}>G</Text>
-            </TouchableOpacity>
-            {/* <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#1877F2' }]} disabled={loading}>
-              <Text style={[styles.socialText, { color: '#f6fa00ff' }]}>f</Text>
-            </TouchableOpacity> */}
-          </View>
 
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: '#1eff00ff',  fontWeight: 'bold' }]}>Don't have an account? </Text>
@@ -163,6 +174,7 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 8 },
   iconText: { fontSize: 16 },
   input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#2e7d32' },
+  eyeIcon: { padding: 10 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   remember: { flexDirection: 'row', alignItems: 'center' },
   checkbox: { width: 16, height: 16, borderWidth: 2, borderColor: '#2e7d32', borderRadius: 3, marginRight: 8 },
