@@ -9,7 +9,6 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
-import { processDetectionAlert } from '../services/NotificationService';
 
 const CropScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -18,8 +17,7 @@ const CropScreen = ({ navigation }) => {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]); 
   const { user } = useAuth(); 
-  const [pairedPiId, setPairedPiId] = useState(null);
-  const [processedDetections, setProcessedDetections] = useState(new Set()); 
+  const [pairedPiId, setPairedPiId] = useState(null); 
 
   useEffect(() => {
     if (!user) {
@@ -27,77 +25,66 @@ const CropScreen = ({ navigation }) => {
       return;
     }
 
-    let unsubscribe = () => {}; 
+    let unsubscribeUser = () => {};
+    let unsubscribeDetections = () => {};
 
-    const fetchUserDataAndSubscribe = async () => {
-      try {
-        const userResult = await UserService.getUserData(user.uid);
-        if (userResult.success && userResult.userData.pairedPiId) {
-          const piId = userResult.userData.pairedPiId;
-          setPairedPiId(piId); 
+    // 1. Listen to the USER document for the pairedPiId in real-time
+    const userDocRef = doc(db, "users", user.uid);
+    
+    unsubscribeUser = onSnapshot(userDocRef, (userDocSnap) => {
+      const userData = userDocSnap.data();
+      const piId = userData?.pairedPiId;
 
-          // --- 🟢 FIX APPLIED HERE ---
-          // Python sends "Crop Analysis", so we must query for that exact string.
-          const q = query(
-            collection(db, "detections"),
-            where("pi_id", "==", piId),
-            where("type", "==", "Crop Analysis"), // <--- CHANGED FROM "Crop"
-            orderBy("timestamp", "desc")
-          );
+      if (piId) {
+        setPairedPiId(piId);
 
-          unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const detectionsData = [];
-            querySnapshot.forEach((doc) => {
-              const data = doc.data();
-              if (data.imageUrl) {
-                detectionsData.push({
-                  id: doc.id,
-                  detection: data.detection || data.primary || "Analysis",
-                  score: data.score || 0,
-                  imageUrl: data.imageUrl, 
-                  timestamp: data.timestamp,
-                  status: data.status || "Unknown"
-                });
-              }
-            });
-            setItems(detectionsData); 
-            setLoading(false);
+        // 2. If we have a Pi ID, listen to the CROP DETECTIONS
+        // NOTE: Ensure "Crop Analysis" matches what your Python script sends!
+        const q = query(
+          collection(db, "detections"),
+          where("pi_id", "==", piId),
+          where("type", "in", ["Crop", "Crop Analysis"]), // Handles both variations
+          orderBy("timestamp", "desc")
+        );
 
-            // Process alerts for new detections
-            querySnapshot.docChanges().forEach((change) => {
-              if (change.type === 'added') {
-                const doc = change.doc;
-                const data = doc.data();
-                const detectionId = doc.id;
+        // Clear previous detection listener if it exists
+        unsubscribeDetections();
 
-                // Only process if we haven't seen this detection before
-                if (!processedDetections.has(detectionId)) {
-                  setProcessedDetections(prev => new Set([...prev, detectionId]));
-                  
-                  // Process alert for new detection
-                  const detection = {
-                    type: 'crop',
-                    detection: data.detection || data.primary || "Analysis",
-                    confidence: data.score || 0,
-                  };
-                  processDetectionAlert(detection, user.uid);
-                }
-              }
-            });
-          }, (error) => {
-             console.error("Query Error:", error);
-             setLoading(false);
+        unsubscribeDetections = onSnapshot(q, (querySnapshot) => {
+          const detectionsData = [];
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.imageUrl) {
+              detectionsData.push({
+                id: doc.id,
+                detection: data.detection || data.primary || "Analysis",
+                score: data.score || 0,
+                imageUrl: data.imageUrl, 
+                timestamp: data.timestamp,
+                status: data.status || "Unknown"
+              });
+            }
           });
-        } else {
+          setItems(detectionsData); 
           setLoading(false);
-        }
-      } catch (error) {
+        }, (error) => {
+          console.error("🔥 Crop Query Error:", error);
+          setLoading(false);
+        });
+      } else {
+        // No Pi ID found yet
+        setPairedPiId(null);
         setLoading(false);
       }
-    };
+    }, (error) => {
+      console.error("🔥 User Sync Error:", error);
+      setLoading(false);
+    });
 
-    fetchUserDataAndSubscribe();
-    return () => unsubscribe();
+    return () => {
+      unsubscribeUser();
+      unsubscribeDetections();
+    };
   }, [user]); 
 
   // --- SELECTION & DELETE LOGIC ---
@@ -209,8 +196,6 @@ const CropScreen = ({ navigation }) => {
   return (
     <ImageBackground source={require('../../assets/backgroundimage.png')} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        
-        {/* HEADER */}
         <View style={styles.brandBar}>
           {isSelectMode ? (
             <View style={styles.selectionHeader}>
@@ -232,7 +217,6 @@ const CropScreen = ({ navigation }) => {
           )}
         </View>
 
-        {/* LIST SHEET */}
         <View style={styles.sheet}>
           <Text style={styles.historyTitle}>Health History</Text>
           {loading ? (
@@ -250,13 +234,13 @@ const CropScreen = ({ navigation }) => {
                   <Text style={styles.emptyText}>
                      {!pairedPiId ? "No IoT Device Paired" : "No Health Scans Yet"}
                   </Text>
+                  {pairedPiId && <Text style={{fontSize: 10, color: '#ccc', marginTop: 5}}>ID: {pairedPiId}</Text>}
                 </View>
               }
             />
           )}
         </View>
 
-        {/* DELETE BAR */}
         {isSelectMode && selectedItems.length > 0 && (
           <View style={styles.actionContainer}>
             <Text style={styles.selectedCount}>{selectedItems.length} items selected</Text>
@@ -270,6 +254,8 @@ const CropScreen = ({ navigation }) => {
     </ImageBackground>
   );
 };
+
+// ... keep your styles the same
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

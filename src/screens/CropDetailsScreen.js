@@ -1,54 +1,69 @@
-﻿import React, { useRef, useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, Animated, SafeAreaView, ActivityIndicator 
+  Modal, TouchableOpacity, SafeAreaView, ActivityIndicator 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { getCropInsight, INSECT_LABELS } from '../config/LabelMap';
+import { getCropInsight } from '../config/LabelMap';
 import * as Speech from 'expo-speech';
-import YoutubeIframe from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../../firebase';
-import { collection, query, where, Timestamp, getDocs, doc, getDoc } from 'firebase/firestore';
-import UserService from '../services/UserService';
+import { doc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
 const CropDetailsScreen = ({ route, navigation }) => {
-  // 1. Get the skeleton data passed from CropScreen
   const { item } = route.params || {};
-
-  // 2. State to hold the full data (including "basis" counts)
   const [fullData, setFullData] = useState(item || {});
   const [loadingFullData, setLoadingFullData] = useState(true);
-
-  // 3. UI States
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [videoModalVisible, setVideoModalVisible] = useState(false);
-  const [playing, setPlaying] = useState(false);
   
-  // 4. Insect Correlation Logic
-  const [mostLikelyInsect, setMostLikelyInsect] = useState(null);
-  const [isLoadingInsect, setIsLoadingInsect] = useState(false);
+  // Modals & Features States
+  const [webModalVisible, setWebModalVisible] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false); // NEW: Image Modal State
+  const [currentUrl, setCurrentUrl] = useState('');
+  const [modalTitle, setModalTitle] = useState(''); 
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
   const { user } = useAuth();
-  const { colors } = useTheme();
 
-  // --- EFFECT 1: FETCH FULL DETAILS (Basis, etc.) ---
+  // 1. Core Data Extraction
+  const rawDiagnosis = fullData.detection || fullData.diagnosis || "Analysis";
+  let score = fullData.score || fullData.healthScore || fullData.confidence || 0;
+  if (score < 1 && score > 0) score = Math.round(score * 100); 
+
+  const isHealthy = rawDiagnosis.toLowerCase().includes('healthy') || score > 85;
+  const imageUrl = fullData.imageUrl || fullData.img?.uri;
+  
+  // 2. Date and Time Logic
+  let detectionDate = "Unknown Date";
+  let detectionTime = "Unknown Time";
+  if (fullData.timestamp) {
+    const dateObj = fullData.timestamp.toDate ? fullData.timestamp.toDate() : new Date(fullData.timestamp);
+    detectionDate = dateObj.toLocaleDateString();
+    detectionTime = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  // 3. Basis / Confidence Logic
+  let basis = fullData.basis || {};
+  if (Object.keys(basis).length === 0 && rawDiagnosis) {
+    basis[rawDiagnosis] = score > 1 ? score / 100 : score; 
+  }
+
+  // Split multiple detections into an array
+  const detectedIssues = rawDiagnosis.split(',').map(issue => issue.trim()).filter(issue => issue.length > 0);
+  const primaryDiagnosis = detectedIssues.length > 0 ? detectedIssues[0] : "Healthy";
+
   useEffect(() => {
     const fetchFullDocument = async () => {
-      if (!item?.id) return;
+      if (!item?.id) {
+        setLoadingFullData(false);
+        return;
+      }
       try {
         const docRef = doc(db, "detections", item.id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          const data = docSnap.data();
-          // Merge fetched data with existing item data
-          setFullData(prev => ({ 
-            ...prev, 
-            ...data,
-            // Ensure timestamp is handled correctly regardless of source
-            timestamp: data.timestamp || prev.timestamp 
-          }));
+          setFullData(prev => ({ ...prev, ...docSnap.data() }));
         }
       } catch (e) {
         console.log("Error fetching full details:", e);
@@ -59,71 +74,42 @@ const CropDetailsScreen = ({ route, navigation }) => {
     fetchFullDocument();
   }, [item]);
 
-  // --- EFFECT 2: FETCH PROBABLE INSECT CAUSE ---
-  useEffect(() => {
-    const fetchProbableInsect = async () => {
-      // Only run if we have a "Insect Bite" detection or generic insect issue
-      const basis = fullData.basis || {};
-      const hasInsectSign = basis['Insect Bite'] > 0 || fullData.detection === 'Insect bite';
-      
-      if (!hasInsectSign || !user) return;
+  // Fallback insight
+  const insight = getCropInsight(primaryDiagnosis) || {
+    title: "General Plant Care",
+    description: `Symptoms detected: ${rawDiagnosis}.`,
+    medicalDetail: "Requires multi-step systemic approach.",
+    treatmentSteps: "1. Isolate plant.\n2. Ensure proper watering.\n3. Apply organic neem oil.\n4. Monitor daily.",
+    youtubeId: null
+  };
 
-      setIsLoadingInsect(true);
-      try {
-        const userResult = await UserService.getUserData(user.uid);
-        const piId = userResult?.userData?.pairedPiId;
-        if (!piId) return;
-
-        // Look back 7 days for insects
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        const q = query(
-          collection(db, "detections"),
-          where("pi_id", "==", piId),
-          where("detection", "in", INSECT_LABELS), // Look for specific bugs
-          where("timestamp", ">=", Timestamp.fromDate(sevenDaysAgo))
-        );
-
-        const snap = await getDocs(q);
-        const counts = {};
-        snap.forEach(doc => {
-          const name = doc.data().detection;
-          counts[name] = (counts[name] || 0) + 1;
-        });
-
-        // Find most frequent insect
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-        if (sorted.length > 0) setMostLikelyInsect(sorted[0][0]);
-      } catch (e) {
-        console.warn("Insect Fetch Error:", e);
-      } finally {
-        setIsLoadingInsect(false);
-      }
-    };
-
-    if (!loadingFullData) {
-      fetchProbableInsect();
+  // --- TEXT TO SPEECH LOGIC ---
+  const toggleSpeech = () => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+      const textToRead = `Diagnostic Report for ${detectionDate}. Detected: ${rawDiagnosis}. ${insight.title}. ${insight.description}. Steps: ${insight.treatmentSteps}`;
+      Speech.speak(textToRead, {
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+        pitch: 1.0,
+        rate: 0.9,
+      });
     }
-  }, [fullData, user, loadingFullData]);
+  };
 
-  // --- DERIVED DATA ---
-  const diagnosis = fullData.detection || fullData.diagnosis || "Analysis";
-  const score = fullData.score || fullData.healthScore || 0;
-  const isHealthy = diagnosis === 'Healthy' || score > 85;
-  const imageUrl = fullData.imageUrl || fullData.img?.uri;
-  const basis = fullData.basis || {}; // Might be empty until fetch completes
+  useEffect(() => {
+    return () => Speech.stop();
+  }, []);
 
-  // Get AI Text
-  const insight = getCropInsight(diagnosis);
-
-  // --- HANDLERS ---
-  const startReading = () => {
-    setIsSpeaking(true);
-    Speech.speak(`${insight.title}. ${insight.description}`, {
-      onDone: () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-    });
+  // --- WEBVIEW LOGIC ---
+  const openWebResource = (url, title) => {
+    setCurrentUrl(url);
+    setModalTitle(title);
+    setWebModalVisible(true);
   };
 
   if (!item) return null;
@@ -131,44 +117,40 @@ const CropDetailsScreen = ({ route, navigation }) => {
   return (
     <ImageBackground source={require('../../assets/backgroundimage.png')} style={styles.container}>
       <SafeAreaView style={{flex: 1}}>
-        
-        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={28} color="#1B4332" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>DIAGNOSTIC REPORT</Text>
-          <View style={{width: 28}} />
+          <TouchableOpacity onPress={toggleSpeech} style={styles.audioAction}>
+            <Ionicons name={isSpeaking ? "stop-circle" : "volume-high"} size={26} color="#1B4332" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
           
-          {/* HERO IMAGE & SCORE */}
-          <View style={styles.heroCard}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewVisible(true)} style={styles.imageFrame}>
-              <Image source={{ uri: imageUrl }} style={styles.mainImage} />
-              <View style={[styles.statusBadge, { backgroundColor: isHealthy ? '#2D6A4F' : '#BC4749' }]}>
-                <Text style={styles.statusText}>{isHealthy ? "HEALTHY" : "ISSUE DETECTED"}</Text>
-              </View>
-            </TouchableOpacity>
-            
-            <View style={styles.scoreSection}>
-              <View>
-                <Text style={styles.dateText}>
-                  {fullData.timestamp?.toDate ? fullData.timestamp.toDate().toLocaleDateString() : 'Recent'}
-                </Text>
-                <Text style={styles.timeText}>
-                  {fullData.timestamp?.toDate ? fullData.timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                </Text>
-              </View>
-              <View style={styles.scoreCircle}>
-                <Text style={[styles.scorePercent, { color: isHealthy ? '#2D6A4F' : '#BC4749' }]}>{score}</Text>
-                <Text style={styles.scoreSub}>SCORE</Text>
-              </View>
+          {/* 🖼️ HERO IMAGE (NOW CLICKABLE) */}
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => setImageModalVisible(true)} 
+            style={styles.heroCard}
+          >
+            <Image source={{ uri: imageUrl }} style={styles.mainImage} />
+            <View style={[styles.statusBadge, { backgroundColor: isHealthy ? '#2D6A4F' : '#BC4749' }]}>
+              <Text style={styles.statusText}>{isHealthy ? "HEALTHY" : "UNHEALTHY"}</Text>
             </View>
+            <View style={styles.expandIcon}>
+              <Ionicons name="expand" size={18} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+
+          {/* ⏰ TIME & DATE SECTION */}
+          <View style={styles.timeSection}>
+            <Ionicons name="time-outline" size={18} color="#64748B" />
+            <Text style={styles.timeText}>Detected on {detectionDate} at {detectionTime}</Text>
           </View>
 
-          {/* BASIS OF ANALYSIS (Dynamic Loading) */}
+          {/* 📊 BASIS OF ANALYSIS SECTION */}
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
                <Ionicons name="analytics" size={20} color="#1B4332" />
@@ -176,162 +158,201 @@ const CropDetailsScreen = ({ route, navigation }) => {
             </View>
             <View style={styles.divider} />
             
-            {loadingFullData ? (
-              <ActivityIndicator color="#1B4332" />
-            ) : Object.keys(basis).length > 0 ? (
-              Object.entries(basis).map(([label, count]) => (
-                <View key={label} style={styles.analysisRow}>
-                  <Text style={styles.analysisLabel}>{label}</Text>
-                  <View style={[styles.countPill, {backgroundColor: count > 0 ? (isHealthy ? '#E8F5E9' : '#FFEBEE') : '#F8FAFC'}]}>
-                     <Text style={[styles.analysisCount, {color: count > 0 ? (isHealthy ? '#2D6A4F' : '#BC4749') : '#94A3B8'}]}>
-                       {count} detected
-                     </Text>
-                  </View>
+            <View style={styles.analysisBox}>
+                <Text style={styles.labelSmall}>DETECTION</Text>
+                <Text style={styles.detectionMain}>{rawDiagnosis}</Text>
+                
+                <Text style={[styles.labelSmall, {marginTop: 15}]}>CONFIDENCE LEVELS</Text>
+                {Object.keys(basis).length > 0 ? (
+                    Object.entries(basis).map(([label, confidence]) => {
+                      const confDecimal = confidence > 1 ? confidence / 100 : confidence;
+                      const confPercent = Math.round(confDecimal * 100);
+                      
+                      return (
+                        <View key={label} style={styles.confidenceRow}>
+                            <Text style={styles.confLabel}>{label}</Text>
+                            <View style={styles.barContainer}>
+                                <View style={[styles.barFill, {width: `${confPercent}%`, backgroundColor: isHealthy ? '#2D6A4F' : '#BC4749'}]} />
+                            </View>
+                            <Text style={styles.confValue}>{confPercent}%</Text>
+                        </View>
+                      )
+                    })
+                ) : (
+                    <Text style={styles.emptyText}>Processing confidence scores...</Text>
+                )}
+                
+                <View style={styles.statusRow}>
+                    <Text style={styles.labelSmall}>STATUS</Text>
+                    <Text style={[styles.statusResult, {color: isHealthy ? '#2D6A4F' : '#BC4749'}]}>
+                        {isHealthy ? "Optimal Condition" : "Intervention Required"}
+                    </Text>
                 </View>
-              ))
-            ) : (
-              <Text style={{color: '#94A3B8', fontStyle: 'italic'}}>No specific symptoms recorded.</Text>
-            )}
+            </View>
           </View>
 
-          {/* AI CROSS REFERENCE (Only if Insect Bite found) */}
-          {(basis['Insect Bite'] > 0 || diagnosis === 'Insect bite') && (
-            <View style={[styles.sheet, styles.causeSheet]}>
-              <Text style={styles.causeLabel}>AI CROSS-REFERENCE</Text>
-              {isLoadingInsect ? (
-                <ActivityIndicator color="#FFF" style={{marginVertical: 10}} />
-              ) : (
-                <View style={styles.causeContent}>
-                  <Ionicons name="bug" size={24} color="#A7F3D0" />
-                  <Text style={styles.causeDesc}>
-                    Diagnostic data suggests recent <Text style={{fontWeight: '900', color: '#A7F3D0'}}>{mostLikelyInsect || "Pest"}</Text> activity is the primary cause of damage.
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* TREATMENT SECTION */}
-          <View style={[styles.sheet, { marginTop: 15 }]}>
-            <View style={styles.treatmentHeader}>
-              <View style={{flex: 1}}>
-                <Text style={styles.treatmentLabel}>RECOMMENDED TREATMENT</Text>
-                <Text style={[styles.insightTitle, {color: isHealthy ? '#2D6A4F' : '#BC4749'}]}>
-                  {insight.title}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={isSpeaking ? () => Speech.stop() : startReading} style={styles.audioBtn}>
-                <Ionicons name={isSpeaking ? "stop-circle" : "volume-high"} size={32} color="#1B4332" />
-              </TouchableOpacity>
-            </View>
+          {/* 🌿 CROP & CONDITION INFORMATION */}
+          <View style={styles.sheet}>
+            <Text style={styles.infoHeading}>WHAT IS PECHAY (BOK CHOY)?</Text>
+            <Text style={styles.infoPara}>
+              Pechay (Brassica rapa L.) is a popular leafy vegetable in the Philippines, essential for food security. It thrives in well-drained soil with plenty of sunlight.
+            </Text>
             
-            <Text style={styles.insightDesc}>{insight.description}</Text>
+            <View style={styles.divider} />
+            
+            <Text style={styles.infoHeading}>OFFICIAL RESOURCES</Text>
+            <Text style={styles.infoPara}>
+              Access the legal agricultural guides from the Department of Agriculture for your specific detections:
+            </Text>
+
+            {detectedIssues.map((issue, index) => {
+              const displayIssue = issue.charAt(0).toUpperCase() + issue.slice(1);
+              return (
+                <TouchableOpacity 
+                  key={index}
+                  style={styles.webLinkBtn}
+                  onPress={() => openWebResource('https://www.buplant.da.gov.ph/', `DA-BPI Guide: ${displayIssue}`)}
+                >
+                    <Ionicons name="globe-outline" size={18} color="#2D6A4F" />
+                    <Text style={styles.webLinkText}>View DA-BPI Guide for {displayIssue}</Text>
+                    <Ionicons name="open-outline" size={18} color="#2D6A4F" style={{marginLeft: 'auto'}} />
+                </TouchableOpacity>
+              );
+            })}
+
+          </View>
+
+          {/* 🩺 RECOMMENDED TREATMENT */}
+          <View style={[styles.sheet, { borderLeftWidth: 5, borderLeftColor: '#2D6A4F' }]}>
+            <Text style={styles.treatmentLabel}>PRIMARY TREATMENT ({primaryDiagnosis.toUpperCase()})</Text>
+            <Text style={styles.treatmentTitle}>{insight.title}</Text>
+            
+            <Text style={styles.treatmentSteps}>
+              {insight.treatmentSteps || insight.description}
+            </Text>
 
             {insight.youtubeId && (
               <TouchableOpacity 
                 style={styles.videoBtn}
-                onPress={() => { setPlaying(true); setVideoModalVisible(true); }}
+                onPress={() => openWebResource(`https://www.youtube.com/embed/${insight.youtubeId}?autoplay=1`, 'Treatment Video Guide')}
               >
                 <Ionicons name="logo-youtube" size={20} color="#FFF" />
-                <Text style={styles.videoBtnText}>WATCH TREATMENT GUIDE</Text>
+                <Text style={styles.videoBtnText}>WATCH TREATMENT VIDEO</Text>
               </TouchableOpacity>
             )}
+            
+            <Text style={styles.legalNotice}>
+              *Consult with a local agriculturist for precise chemical applications. (Ref: DOST-PCAARRD)
+            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>
-      
-      {/* MODALS */}
-      <Modal visible={previewVisible} transparent={true} onRequestClose={() => setPreviewVisible(false)}>
-         <View style={styles.modalContainer}>
-             <TouchableOpacity style={styles.closeModal} onPress={() => setPreviewVisible(false)}>
-                 <Ionicons name="close-circle" size={40} color="#FFF"/>
-             </TouchableOpacity>
-             {imageUrl && <Image source={{ uri: imageUrl }} style={styles.fullImage} />}
+
+       {/* FULL SCREEN IMAGE MODAL */}
+       <Modal visible={imageModalVisible} transparent={true} animationType="fade" onRequestClose={() => setImageModalVisible(false)}>
+         <View style={styles.imageModalContainer}>
+           <TouchableOpacity style={styles.closeImageBtn} onPress={() => setImageModalVisible(false)}>
+             <Ionicons name="close-circle" size={40} color="#FFF"/>
+           </TouchableOpacity>
+           {imageUrl && <Image source={{ uri: imageUrl }} style={styles.fullImage} />}
          </View>
        </Modal>
 
-       {insight.youtubeId && (
-         <Modal visible={videoModalVisible} transparent={true} animationType="slide">
-           <View style={styles.videoModalContainer}>
-             <View style={styles.videoWrapper}>
-               <YoutubeIframe
-                 height={220}
-                 play={playing}
-                 videoId={insight.youtubeId}
-               />
-               <TouchableOpacity style={styles.closeVideoBtn} onPress={() => { setPlaying(false); setVideoModalVisible(false); }}>
-                 <Text style={{color: 'white', fontWeight: 'bold'}}>Close Video</Text>
-               </TouchableOpacity>
-             </View>
-           </View>
-         </Modal>
-       )}
+       {/* UNIVERSAL WEBPAGE VIEWER MODAL */}
+       <Modal visible={webModalVisible} animationType="slide" presentationStyle="pageSheet">
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+            <View style={styles.webHeader}>
+              <TouchableOpacity onPress={() => setWebModalVisible(false)} style={styles.webCloseBtn}>
+                <Ionicons name="close" size={28} color="#1B4332" />
+                <Text style={styles.webCloseText}>Close</Text>
+              </TouchableOpacity>
+              <Text style={styles.webTitle}>{modalTitle}</Text>
+              <View style={{ width: 70 }} /> 
+            </View>
+            <WebView 
+              source={{ uri: currentUrl }} 
+              style={{ flex: 1 }} 
+              startInLoadingState={true}
+              allowsInlineMediaPlayback={true}
+              renderLoading={() => (
+                <View style={styles.webLoader}>
+                  <ActivityIndicator size="large" color="#1B4332" />
+                </View>
+              )}
+            />
+          </SafeAreaView>
+       </Modal>
+
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16,
-    paddingVertical: 10
-  },
-  headerTitle: { color: '#1B4332', fontWeight: '900', fontSize: 14, letterSpacing: 3, opacity: 0.8 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  headerTitle: { color: '#1B4332', fontWeight: '900', fontSize: 13, letterSpacing: 2 },
+  audioAction: { padding: 5 },
   scrollBody: { paddingHorizontal: 16, paddingBottom: 40 },
   
-  heroCard: { backgroundColor: '#FFF', borderRadius: 25, overflow: 'hidden', elevation: 10, marginBottom: 15 },
-  imageFrame: { width: '100%', height: 230, backgroundColor: '#eee' },
-  mainImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  statusBadge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  // HERO CARD UPDATES
+  heroCard: { backgroundColor: '#FFF', borderRadius: 20, overflow: 'hidden', elevation: 5, marginBottom: 10, position: 'relative' },
+  mainImage: { width: '100%', height: 200, resizeMode: 'cover' },
+  statusBadge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   statusText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
+  expandIcon: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', padding: 6, borderRadius: 20 },
   
-  scoreSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  dateText: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
-  timeText: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
-  scoreCircle: { alignItems: 'center', backgroundColor: '#F8FAFC', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 18 },
-  scorePercent: { fontSize: 24, fontWeight: '900' },
-  scoreSub: { fontSize: 8, fontWeight: 'bold', color: '#94A3B8', marginTop: -2 },
+  // IMAGE MODAL STYLES
+  imageModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  closeImageBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
+  fullImage: { width: '100%', height: '80%', resizeMode: 'contain' },
 
-  sheet: { backgroundColor: '#FFF', borderRadius: 25, padding: 20, marginBottom: 12, elevation: 5 },
+  timeSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
+  timeText: { fontSize: 12, fontWeight: '700', color: '#64748B', marginLeft: 5 },
+
+  sheet: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 12, elevation: 3 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  sheetTitle: { fontSize: 13, fontWeight: '800', marginLeft: 8, color: '#94A3B8', letterSpacing: 1 },
-  divider: { height: 1, backgroundColor: '#F1F5F9', marginBottom: 15 },
+  sheetTitle: { fontSize: 12, fontWeight: '800', marginLeft: 8, color: '#64748B' },
+  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15 },
   
-  analysisRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  analysisLabel: { color: '#475569', fontSize: 15, fontWeight: '700' },
-  countPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  analysisCount: { fontWeight: '800', fontSize: 12 },
+  analysisBox: { padding: 5 },
+  labelSmall: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1 },
+  detectionMain: { fontSize: 20, fontWeight: '800', color: '#1B4332', marginTop: 4, textTransform: 'capitalize' },
+  confidenceRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
+  confLabel: { flex: 1.5, fontSize: 13, fontWeight: '600', color: '#475569', textTransform: 'capitalize' },
+  barContainer: { flex: 2, height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, marginHorizontal: 10 },
+  barFill: { height: '100%', borderRadius: 4 },
+  confValue: { flex: 0.5, fontSize: 12, fontWeight: '800', textAlign: 'right' },
+  statusRow: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#F8FAFC', flexDirection: 'row', justifyContent: 'space-between' },
+  statusResult: { fontWeight: '900', fontSize: 13 },
 
-  causeSheet: { backgroundColor: '#1B4332' },
-  causeLabel: { color: '#A7F3D0', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
-  causeContent: { flexDirection: 'row', alignItems: 'center' },
-  causeDesc: { color: '#FFF', fontSize: 14, lineHeight: 20, flex: 1, marginLeft: 12 },
-
-  treatmentHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 15 },
-  treatmentLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', marginBottom: 5, letterSpacing: 1 },
-  insightTitle: { fontSize: 20, fontWeight: '800' },
-  insightDesc: { fontSize: 15, color: '#475569', lineHeight: 24, marginBottom: 20 },
-  videoBtn: { 
-    backgroundColor: '#BC4749', 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    padding: 16, 
-    borderRadius: 18 
+  infoHeading: { fontSize: 14, fontWeight: '900', color: '#1B4332', marginBottom: 8 },
+  infoPara: { fontSize: 14, color: '#475569', lineHeight: 22, marginBottom: 10 },
+  
+  webLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FFF4',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
   },
-  videoBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 10, fontSize: 13 },
-  audioBtn: { marginLeft: 10 },
+  webLinkText: { color: '#2D6A4F', fontWeight: '800', fontSize: 13, marginLeft: 10 },
+
+  treatmentLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1 },
+  treatmentTitle: { fontSize: 18, fontWeight: '800', color: '#1B4332', marginVertical: 8 },
+  treatmentSteps: { fontSize: 14, color: '#475569', lineHeight: 24, marginBottom: 20 },
+  videoBtn: { backgroundColor: '#BC4749', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 12 },
+  videoBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 10, fontSize: 12 },
+  legalNotice: { fontSize: 10, color: '#94A3B8', marginTop: 15, textAlign: 'center' },
   
-  modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
-  closeModal: { position: 'absolute', top: 40, right: 20, zIndex: 10 },
-  fullImage: { width: '100%', height: 400, resizeMode: 'contain' },
-  
-  videoModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  videoWrapper: { backgroundColor: '#000', borderRadius: 12, overflow: 'hidden', paddingBottom: 10 },
-  closeVideoBtn: { alignItems: 'center', padding: 15 }
+  webHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  webCloseBtn: { flexDirection: 'row', alignItems: 'center' },
+  webCloseText: { fontSize: 16, color: '#1B4332', fontWeight: '600', marginLeft: 5 },
+  webTitle: { fontSize: 14, fontWeight: '800', color: '#1E293B' },
+  webLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
+  emptyText: { fontStyle: 'italic', color: '#94A3B8', fontSize: 12, marginTop: 5 }
 });
 
 export default CropDetailsScreen;

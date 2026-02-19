@@ -1,26 +1,35 @@
 ﻿import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Dimensions,
-  Alert,
-} from "react-native";
+import { 
+  Dimensions, 
+  ScrollView, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  Alert, 
+  StyleSheet 
+} from "react-native"; // Added missing UI components
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  Timestamp, 
+  doc, 
+  orderBy 
+} from "firebase/firestore"; // Consolidated into one clean import
 import Svg, { Path } from "react-native-svg";
 import { useTheme } from "../theme/ThemeContext";
 import { db } from "../../firebase";
-import { collection, query, where, onSnapshot, Timestamp } from "firebase/firestore";
 import { CROP_LABELS, INSECT_LABELS } from "../config/LabelMap";
 import ViewShot from "react-native-view-shot";
 import * as Print from "expo-print";
 import * as MediaLibrary from "expo-media-library";
 import { useAuth } from "../context/AuthContext";
-import UserService from "../services/UserService";
 
 const screenWidth = Dimensions.get("window").width;
+
+// ... rest of your component code
 
 const AnalyticsScreen = ({ navigation }) => {
   const [selectedPeriod, setSelectedPeriod] = useState("week");
@@ -28,140 +37,133 @@ const AnalyticsScreen = ({ navigation }) => {
   const { colors } = useTheme();
 
   const [loading, setLoading] = useState(true);
-  
-  // --- FIX 1: Set default overview stats to 0 ---
   const [overviewData, setOverviewData] = useState({ detections: 0, fields: 0, healthScore: 0 });
-  
   const [cropHealthChartData, setCropHealthChartData] = useState([]);
   const [insectChartData, setInsectChartData] = useState([]);
   const [insights, setInsights] = useState([]);
+  const [pairedPiId, setPairedPiId] = useState(null);
 
   const reportRef = useRef();
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) {
-      // No user, reset everything to 0
-      setLoading(false);
-      setOverviewData({ detections: 0, fields: 0, healthScore: 0 });
-      setCropHealthChartData([]);
-      setInsectChartData([]);
-      setInsights([]);
-      return;
-    }
+  if (!user) {
+    setLoading(false);
+    return;
+  }
 
-    setLoading(true);
-    let unsubscribe = () => {};
+  let unsubscribeUser = () => {};
+  let unsubscribeDetections = () => {};
 
-    const fetchUserDataAndSubscribe = async () => {
-      try {
-        const userResult = await UserService.getUserData(user.uid);
+  const userDocRef = doc(db, "users", user.uid);
+  
+  unsubscribeUser = onSnapshot(userDocRef, (userSnap) => {
+    const userData = userSnap.data();
+    const piId = userData?.pairedPiId;
 
-        if (userResult.success && userResult.userData.pairedPiId) {
-          // --- This user HAS a paired Pi ---
-          const piId = userResult.userData.pairedPiId;
+    if (piId) {
+      setPairedPiId(piId);
 
-          const getStartDate = (period) => {
-            const now = new Date();
-            if (period === "day") now.setDate(now.getDate() - 1);
-            if (period === "week") now.setDate(now.getDate() - 7);
-            if (period === "month") now.setMonth(now.getMonth() - 1);
-            if (period === "year") now.setFullYear(now.getFullYear() - 1);
-            return Timestamp.fromDate(now);
-          };
+      // 1. IMPROVED DATE CALCULATION
+      const getStartDate = (period) => {
+        const date = new Date();
+        if (period === "day") date.setHours(0, 0, 0, 0); // Start of today
+        else if (period === "week") date.setDate(date.getDate() - 7);
+        else if (period === "month") date.setMonth(date.getMonth() - 1);
+        else if (period === "year") date.setFullYear(date.getFullYear() - 1);
+        return Timestamp.fromDate(date);
+      };
 
-          const startDate = getStartDate(selectedPeriod);
+      const startDate = getStartDate(selectedPeriod);
 
-          const q = query(
-            collection(db, "detections"),
-            where("pi_id", "==", piId),
-            where("timestamp", ">=", startDate)
-          );
+      // 2. BROADENED QUERY 
+      // Removed the 'type' filter here so we catch all detections, 
+      // then we filter them in Javascript for better reliability.
+      const q = query(
+        collection(db, "detections"),
+        where("pi_id", "==", piId),
+        where("timestamp", ">=", startDate),
+        orderBy("timestamp", "desc")
+      );
 
-          unsubscribe = onSnapshot(q, (querySnapshot) => {
-            let totalDetections = 0;
-            const healthCounts = {};
-            const insectCounts = {};
+      unsubscribeDetections();
+      unsubscribeDetections = onSnapshot(q, (querySnapshot) => {
+        let totalDetections = 0;
+        const healthCounts = {};
+        const insectCounts = {};
 
-            querySnapshot.forEach((doc) => {
-              totalDetections++;
-              const data = doc.data() || {};
-              const detection = data.detection;
+        console.log(`📊 Found ${querySnapshot.size} total docs for ${selectedPeriod}`);
 
-              if (CROP_LABELS.includes(detection)) {
-                healthCounts[detection] = (healthCounts[detection] || 0) + 1;
-              } else if (INSECT_LABELS.includes(detection)) {
-                insectCounts[detection] = (insectCounts[detection] || 0) + 1;
-              }
-            });
+        querySnapshot.forEach((doc) => {
+          totalDetections++;
+          const data = doc.data();
+          
+          // Try to find the name in multiple common fields
+          const rawName = data.detection || data.primary || data.label || "Unknown";
+          const name = rawName.trim(); 
+          const type = data.type || "";
 
-            const totalHealthy = healthCounts["Healthy"] || 0;
-            const totalUnhealthy =
-              (healthCounts["Wilting"] || 0) +
-              (healthCounts["Spotting"] || 0) +
-              (healthCounts["Yellowing"] || 0) +
-              (healthCounts["Insect bite"] || 0); // Corrected "Insect Bite"
-            const totalCrops = totalHealthy + totalUnhealthy;
-            const healthScore = totalCrops === 0 ? 0 : Math.round((totalHealthy / totalCrops) * 100);
+          // 3. FLEXIBLE FILTERING LOGIC
+          // Check if it's a Crop or an Insect
+          if (type.includes("Crop") || CROP_LABELS.includes(name)) {
+            healthCounts[name] = (healthCounts[name] || 0) + 1;
+          } 
+          // If the type says Insect OR it's in our Insect list
+          else if (type.includes("Insect") || INSECT_LABELS.includes(name)) {
+            insectCounts[name] = (insectCounts[name] || 0) + 1;
+          }
+        });
 
-            setOverviewData({
-              detections: totalDetections,
-              fields: 1, // Set to 1 *only* if Pi is paired
-              healthScore: healthScore,
-            });
+        // Calculate Crop Health
+        const totalHealthy = healthCounts["Healthy"] || 0;
+        const totalUnhealthy = Object.entries(healthCounts)
+          .filter(([key]) => key !== "Healthy")
+          .reduce((sum, [_, val]) => sum + val, 0);
+        
+        const totalCrops = totalHealthy + totalUnhealthy;
+        const healthScore = totalCrops === 0 ? 100 : Math.round((totalHealthy / totalCrops) * 100);
 
-            setCropHealthChartData([
-              { label: "Healthy", value: totalHealthy, color: "#2ecc71" },
-              { label: "Affected", value: totalUnhealthy, color: "#e74c3c" },
-            ]);
+        setOverviewData({
+          detections: totalDetections,
+          fields: 1,
+          healthScore: healthScore,
+        });
 
-            setInsectChartData(
-              Object.keys(insectCounts).map((key) => ({
-                label: key,
-                value: insectCounts[key],
-                color: getColorForLabel(key),
-              }))
-            );
+        // Update Crop Chart
+        setCropHealthChartData([
+          { label: "Healthy", value: totalHealthy, color: "#2ecc71" },
+          { label: "Affected", value: totalUnhealthy, color: "#e74c3c" },
+        ]);
 
-            let mostCommonPest = Object.entries(insectCounts).reduce(
-              (max, curr) => (curr[1] > max[1] ? curr : max),
-              ["None", 0]
-            );
+        // 4. FIX: ENSURE INSECT DATA IS MAPPED CORRECTLY
+        const mappedInsects = Object.keys(insectCounts).map((key) => ({
+          label: key,
+          value: insectCounts[key],
+          color: getColorForLabel(key),
+        }));
 
-            const newInsights = [
-              { title: "Growth Monitoring", description: `Overall crop health is stable at ${healthScore}%.` },
-            ];
+        setInsectChartData(mappedInsects);
 
-            if (mostCommonPest[0] !== "None") {
-              newInsights.push({
-                title: "Key Pest Alert",
-                description: `${mostCommonPest[0]} detected ${mostCommonPest[1]} times this ${selectedPeriod}.`,
-              });
-            }
-
-            setInsights(newInsights);
-            setLoading(false);
-          });
-        } else {
-          // --- FIX 2: User is logged in but has NO paired Pi ---
-          setOverviewData({ detections: 0, fields: 0, healthScore: 0 });
-          setCropHealthChartData([]);
-          setInsectChartData([]);
-          setInsights([]);
-          setLoading(false);
-          // --- End of FIX 2 ---
-        }
-      } catch (error) {
-        console.error("Error fetching user data for Analytics:", error);
+        // Insights...
+        const newInsights = [{ title: "Analysis", description: `Data updated for the last ${selectedPeriod}.` }];
+        setInsights(newInsights);
         setLoading(false);
-      }
-    };
+      }, (err) => {
+        console.error("🔥 Firestore Error:", err);
+        setLoading(false);
+      });
 
-    fetchUserDataAndSubscribe();
-    return () => unsubscribe();
-  }, [selectedPeriod, user]);
+    } else {
+      setLoading(false);
+    }
+  });
 
-  // --- FIX 3: Updated Color Map to match new labels ---
+  return () => {
+    unsubscribeUser();
+    unsubscribeDetections();
+  };
+}, [selectedPeriod, user]);
+
   const getColorForLabel = (label) => {
     const map = {
       'Beneficial Bee': "#f1c40f",
@@ -172,10 +174,10 @@ const AnalyticsScreen = ({ navigation }) => {
       'Infected Flea Beetle': "#e67e22",
       'Infected Pumpkin Beetle': "#1abc9c",
     };
-    return map[label] || "#ccc"; // Default gray
+    return map[label] || "#ccc";
   };
-  // --- End of FIX 3 ---
 
+  // --- CHART RENDERING HELPERS ---
   const polarToCartesian = (cx, cy, r, angle) => {
     const rad = ((angle - 90) * Math.PI) / 180;
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -216,58 +218,25 @@ const AnalyticsScreen = ({ navigation }) => {
     <View style={{ marginTop: 8, flex: 1, paddingLeft: 10 }}>
       {items.map((it, idx) => (
         <View key={idx} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
-          <View
-            style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: it.color, marginRight: 8 }}
-          />
-          <Text style={{ color: colors.text, fontSize: 12 }}>
-            {`${it.label} (${it.value})`}
-          </Text>
+          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: it.color, marginRight: 8 }} />
+          <Text style={{ color: colors.text, fontSize: 12 }}>{`${it.label} (${it.value})`}</Text>
         </View>
       ))}
     </View>
   );
 
-  const captureReport = async () => {
-    try {
-      return await reportRef.current.capture();
-    } catch {
-      Alert.alert("Error", "Could not capture report.");
-      return null;
-    }
-  };
-
-  const onExportPng = async () => {
-    const uri = await captureReport();
-    if (!uri) return;
-
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Enable storage access to save export.");
-      return;
-    }
-
-    await MediaLibrary.saveToLibraryAsync(uri);
-    Alert.alert("Success!", "Report saved to gallery.");
-  };
-
-  const onExportPdf = async () => {
-    const imageBase64 = await reportRef.current.capture({
-      result: "base64",
-      format: "png",
-      quality: 0.9,
-    });
-
-    const html = `
-      <html><body style="margin:0;"><img src="data:image/png;base64,${imageBase64}" style="width:100%;" /></body></html>
-    `;
-
-    await Print.printAsync({ html });
-  };
-
+  // --- EXPORT FUNCTIONS ---
   const onExport = () => {
     Alert.alert("Export Report", "Choose format:", [
-      { text: "PNG", onPress: onExportPng },
-      { text: "PDF", onPress: onExportPdf },
+      { text: "PNG", onPress: async () => {
+          const uri = await reportRef.current.capture();
+          await MediaLibrary.saveToLibraryAsync(uri);
+          Alert.alert("Success", "Saved to Gallery");
+      }},
+      { text: "PDF", onPress: async () => {
+          const base64 = await reportRef.current.capture({ result: "base64" });
+          await Print.printAsync({ html: `<html><body><img src="data:image/png;base64,${base64}" style="width:100%;" /></body></html>` });
+      }},
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -278,30 +247,18 @@ const AnalyticsScreen = ({ navigation }) => {
         <View style={{ backgroundColor: colors.bg }} collapsable={false}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Analytics</Text>
-            <Text style={[styles.subtitle, { color: colors.muted }]}>
-              Insights and trends for your crops
-            </Text>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>Insights and trends for your crops</Text>
           </View>
 
           <View style={styles.periodSelector}>
-            {periods.map((period) => (
+            {periods.map((p) => (
               <TouchableOpacity
-                key={period}
-                style={[
-                  styles.periodButton,
-                  { backgroundColor: colors.card },
-                  selectedPeriod === period && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => setSelectedPeriod(period)}
+                key={p}
+                style={[styles.periodButton, { backgroundColor: colors.card }, selectedPeriod === p && { backgroundColor: colors.primary }]}
+                onPress={() => setSelectedPeriod(p)}
               >
-                <Text
-                  style={[
-                    styles.periodText,
-                    { color: colors.muted },
-                    selectedPeriod === period && { color: "#fff" },
-                  ]}
-                >
-                  {period.charAt(0).toUpperCase() + period.slice(1)}
+                <Text style={[styles.periodText, { color: selectedPeriod === p ? "#fff" : colors.muted }]}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -309,125 +266,79 @@ const AnalyticsScreen = ({ navigation }) => {
 
           <View style={styles.overviewSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
+            {loading ? <ActivityIndicator color={colors.primary} /> : (
               <View style={styles.overviewGrid}>
-                <View style={[styles.overviewCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.overviewNumber, { color: colors.primary }]}>
-                    {overviewData.detections}
-                  </Text>
-                  <Text style={[styles.overviewLabel, { color: colors.muted }]}>Total Detections</Text>
-                </View>
-
-                <View style={[styles.overviewCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.overviewNumber, { color: colors.primary }]}>
-                    {overviewData.fields}
-                  </Text>
-                  <Text style={[styles.overviewLabel, { color: colors.muted }]}>Active Fields</Text>
-                </View>
-
-                <View style={[styles.overviewCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.overviewNumber, { color: colors.primary }]}>
-                    {overviewData.healthScore}%
-                  </Text>
-                  <Text style={[styles.overviewLabel, { color: colors.muted }]}>Health Score</Text>
-                </View>
+                <StatCard num={overviewData.detections} label="Detections" color={colors.primary} cardBg={colors.card} />
+                <StatCard num={overviewData.fields} label="Active Fields" color={colors.primary} cardBg={colors.card} />
+                <StatCard num={`${overviewData.healthScore}%`} label="Health Score" color={colors.primary} cardBg={colors.card} />
               </View>
             )}
           </View>
 
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Overall Crop Health Distribution
-            </Text>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Pie size={180} data={cropHealthChartData} />
-                <Legend items={cropHealthChartData} />
-              </View>
-            )}
-          </View>
-
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Overall Insect Distribution
-            </Text>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Pie size={180} data={insectChartData} />
-                <Legend items={insectChartData} />
-              </View>
-            )}
-          </View>
+          <ChartCard title="Crop Health Distribution" loading={loading} data={cropHealthChartData} colors={colors} Pie={Pie} Legend={Legend} />
+          <ChartCard title="Insect Distribution" loading={loading} data={insectChartData} colors={colors} Pie={Pie} Legend={Legend} />
 
           <View style={styles.insightsSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Key Insights</Text>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              insights.map((insight, index) => (
-                <View key={index} style={[styles.insightCard, { backgroundColor: colors.card }]}>
-                  <View style={styles.insightIcon} />
-                  <View style={styles.insightContent}>
-                    <Text style={[styles.insightTitle, { color: colors.text }]}>
-                      {insight.title}
-                    </Text>
-                    <Text style={[styles.insightDescription, { color: colors.muted }]}>
-                      {insight.description}
-                    </Text>
-                  </View>
+            {insights.map((ins, i) => (
+              <View key={i} style={[styles.insightCard, { backgroundColor: colors.card }]}>
+                <View style={styles.insightContent}>
+                  <Text style={[styles.insightTitle, { color: colors.text }]}>{ins.title}</Text>
+                  <Text style={[styles.insightDescription, { color: colors.muted }]}>{ins.description}</Text>
                 </View>
-              ))
-            )}
+              </View>
+            ))}
           </View>
         </View>
       </ViewShot>
 
-      <View style={styles.exportSection}>
-        <TouchableOpacity style={[styles.exportButton, { backgroundColor: colors.primary }]} onPress={onExport}>
-          <View style={styles.exportIcon} />
-          <Text style={styles.exportText}>Export Report</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={[styles.exportButton, { backgroundColor: colors.primary }]} onPress={onExport}>
+        <Text style={styles.exportText}>Export Report</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
 
+// Sub-components for cleaner JSX
+const StatCard = ({ num, label, color, cardBg }) => (
+  <View style={[styles.overviewCard, { backgroundColor: cardBg }]}>
+    <Text style={[styles.overviewNumber, { color }]}>{num}</Text>
+    <Text style={[styles.overviewLabel, { color: '#94A3B8' }]}>{label}</Text>
+  </View>
+);
+
+const ChartCard = ({ title, loading, data, colors, Pie, Legend }) => (
+  <View style={[styles.card, { backgroundColor: colors.card }]}>
+    <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+    {loading ? <ActivityIndicator color={colors.primary} /> : (
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: 'center' }}>
+        <Pie size={150} data={data} />
+        <Legend items={data} />
+      </View>
+    )}
+  </View>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 20 },
-  title: { fontSize: 28, fontWeight: "bold", marginBottom: 5 },
-  subtitle: { fontSize: 16 },
-  periodSelector: { flexDirection: "row", paddingHorizontal: 20, marginBottom: 30 },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 10,
-    marginHorizontal: 5,
-    borderRadius: 20,
-    alignItems: "center",
-  },
-  periodText: { fontSize: 14, fontWeight: "600" },
-  overviewSection: { paddingHorizontal: 20, marginBottom: 30 },
-  sectionTitle: { fontSize: 18, fontWeight: "900", marginBottom: 12 },
+  header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20 },
+  title: { fontSize: 28, fontWeight: "bold" },
+  subtitle: { fontSize: 16, marginTop: 5 },
+  periodSelector: { flexDirection: "row", paddingHorizontal: 15, marginBottom: 20 },
+  periodButton: { flex: 1, paddingVertical: 8, marginHorizontal: 5, borderRadius: 20, alignItems: "center" },
+  periodText: { fontSize: 13, fontWeight: "600" },
+  overviewSection: { paddingHorizontal: 20, marginBottom: 25 },
+  sectionTitle: { fontSize: 18, fontWeight: "800", marginBottom: 15 },
   overviewGrid: { flexDirection: "row", justifyContent: "space-between" },
-  overviewCard: { flex: 1, padding: 20, marginHorizontal: 5, borderRadius: 15, alignItems: "center" },
-  overviewNumber: { fontSize: 24, fontWeight: "bold", marginBottom: 5 },
-  overviewLabel: { fontSize: 12, textAlign: "center" },
-  card: { padding: 16, borderRadius: 15, marginHorizontal: 20, marginBottom: 20 },
+  overviewCard: { flex: 1, padding: 15, marginHorizontal: 4, borderRadius: 15, alignItems: "center", elevation: 2 },
+  overviewNumber: { fontSize: 22, fontWeight: "bold" },
+  overviewLabel: { fontSize: 10, marginTop: 4 },
+  card: { padding: 20, borderRadius: 20, marginHorizontal: 20, marginBottom: 20, elevation: 3 },
   insightsSection: { paddingHorizontal: 20, marginBottom: 30 },
-  insightCard: { padding: 15, borderRadius: 10, marginBottom: 10, flexDirection: "row" },
-  insightIcon: { width: 20, height: 20, marginRight: 15, backgroundColor: "#ccc", borderRadius: 4 },
-  insightContent: { flex: 1 },
+  insightCard: { padding: 15, borderRadius: 15, marginBottom: 10 },
   insightTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 5 },
   insightDescription: { fontSize: 14, lineHeight: 20 },
-  exportSection: { paddingHorizontal: 20, marginBottom: 30 },
-  exportButton: { paddingVertical: 15, borderRadius: 10, flexDirection: "row", justifyContent: "center" },
-  exportIcon: { width: 20, height: 20, marginRight: 10, backgroundColor: "#fff", borderRadius: 4 },
+  exportButton: { margin: 20, paddingVertical: 15, borderRadius: 15, alignItems: "center", marginBottom: 50 },
   exportText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 });
 
