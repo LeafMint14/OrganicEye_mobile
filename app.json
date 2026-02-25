@@ -39,12 +39,20 @@
           "photosPermission": "The app needs access to your photos to let you choose a profile picture."
         }
       ],
-      "expo-barcode-scanner"
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Organic Eye to access your camera to scan IoT device QR codes.",
+          "microphonePermission": "Allow Organic Eye to access your microphone for video recording."
+        }
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
-        "projectId": "d369212a-e2a4-43cd-afd0-5adae93a00a9"
+        "projectId": "a3d2d52e-cffe-46c7-b3e5-867ee4932cfa"
       }
-    }
+    },
+    "owner": "qjjbalde14"
   }
 }

@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-// --- 1. THIS IS THE CORRECT IMPORT ---
-import { CameraView, Camera } from 'expo-camera'; 
+import { CameraView, useCameraPermissions } from 'expo-camera'; 
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
@@ -10,24 +9,24 @@ import { Ionicons } from '@expo/vector-icons';
 const RegisterIoTScreen = ({ navigation }) => {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 2. Ask for camera permission (using the 'Camera' module)
-  useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
+  const [permission, requestPermission] = useCameraPermissions();
 
-    getCameraPermissions();
-  }, []);
+  // --- NEW: SAFE NAVIGATION FALLBACK ---
+  const handleGoBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      // If history is empty due to an app reload, force it back to Settings
+      navigation.navigate('Settings'); 
+    }
+  };
 
-  // 3. This function runs when a QR code is successfully scanned
   const handleBarCodeScanned = async ({ type, data }) => {
-    setScanned(true); // Stop scanning
-    setIsLoading(true); // Show loading spinner
+    setScanned(true); 
+    setIsLoading(true); 
     
     console.log(`Scanned QR code! Type: ${type} Data: ${data}`);
 
@@ -40,7 +39,7 @@ const RegisterIoTScreen = ({ navigation }) => {
         Alert.alert(
           'Success!',
           `You have successfully paired with device: ${data}`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          [{ text: 'OK', onPress: handleGoBack }] // <-- Updated
         );
       } else {
         throw new Error(result.error);
@@ -57,56 +56,62 @@ const RegisterIoTScreen = ({ navigation }) => {
     }
   };
 
-  // 4. Render permission status
-  if (hasPermission === null) {
+  if (!permission) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center' }]}>
-        <Text style={{ color: colors.text, textAlign: 'center' }}>
-          Requesting camera permission...
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ color: colors.text, marginTop: 15 }}>
+          Checking camera permissions...
         </Text>
       </View>
     );
   }
-  if (hasPermission === false) {
+
+  if (!permission.granted) {
     return (
       <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center' }]}>
-        <Text style={[styles.text, { color: colors.text, textAlign: 'center', margin: 20 }]}>
-          No access to camera. Please enable camera permissions in your phone's settings to use this feature.
+        <Ionicons name="camera-outline" size={60} color={colors.muted} style={{ alignSelf: 'center', marginBottom: 20 }} />
+        <Text style={[styles.text, { color: colors.text, textAlign: 'center', marginHorizontal: 30, marginBottom: 30, fontSize: 16 }]}>
+          Organic Eye needs your permission to use the camera to scan the IoT device's QR code.
         </Text>
+        
         <TouchableOpacity 
-          style={[styles.button, { backgroundColor: colors.primary }]} 
-          onPress={() => navigation.goBack()}
+          style={[styles.button, { backgroundColor: colors.primary, marginBottom: 15 }]} 
+          onPress={requestPermission}
         >
-          <Text style={styles.buttonText}>Go Back</Text>
+          <Text style={styles.buttonText}>Grant Permission</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.muted }]} 
+          onPress={handleGoBack} // <-- Updated
+        >
+          <Text style={[styles.buttonText, { color: colors.text }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // 5. This is the main return: show the camera scanner
   return (
     <View style={styles.container}>
-      {/* --- 3. THIS IS THE CORRECT COMPONENT --- */}
       <CameraView
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
-          barcodeTypes: ["qr"], // We only care about QR codes
+          barcodeTypes: ["qr"], 
         }}
         style={StyleSheet.absoluteFillObject}
       />
       
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
         <TouchableOpacity 
           style={styles.backButton} 
-          onPress={() => navigation.goBack()}
+          onPress={handleGoBack} // <-- Updated
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Scan IoT Device QR Code</Text>
       </View>
 
-      {/* Scanner Overlay */}
       <View style={styles.overlay}>
         <View style={styles.scannerFrame} />
         <Text style={styles.scannerText}>
@@ -114,7 +119,6 @@ const RegisterIoTScreen = ({ navigation }) => {
         </Text>
       </View>
 
-      {/* Loading indicator when we are saving */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
@@ -125,7 +129,6 @@ const RegisterIoTScreen = ({ navigation }) => {
   );
 };
 
-// ... Your styles are 100% fine, no changes needed ...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -137,7 +140,7 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50, // Adjust for status bar
+    paddingTop: 50, 
     paddingBottom: 15,
     paddingHorizontal: 15,
   },

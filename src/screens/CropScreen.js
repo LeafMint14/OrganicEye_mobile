@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, ImageBackground, FlatList, Image,
-  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView 
+  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView,
+  Platform, StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { db } from '../../firebase'; 
@@ -9,6 +10,8 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
+// --- ADDED IMPORT FOR NOTIFICATIONS ---
+import { processDetectionAlert } from '../services/NotificationService';
 
 const CropScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -18,6 +21,7 @@ const CropScreen = ({ navigation }) => {
   const [selectedItems, setSelectedItems] = useState([]); 
   const { user } = useAuth(); 
   const [pairedPiId, setPairedPiId] = useState(null); 
+  const [processedDetections, setProcessedDetections] = useState(new Set()); 
 
   useEffect(() => {
     if (!user) {
@@ -28,33 +32,40 @@ const CropScreen = ({ navigation }) => {
     let unsubscribeUser = () => {};
     let unsubscribeDetections = () => {};
 
-    // 1. Listen to the USER document for the pairedPiId in real-time
+    // 1. Listen to the USER document for the pairedPiId and Settings
     const userDocRef = doc(db, "users", user.uid);
     
     unsubscribeUser = onSnapshot(userDocRef, (userDocSnap) => {
       const userData = userDocSnap.data();
       const piId = userData?.pairedPiId;
+      
+      // --- GRAB THE USER'S CUSTOM ALERT SETTINGS ---
+      const alertSettings = userData?.alertSettings || {
+        immediateAlerts: true,
+        cropAlerts: true,
+        pushNotifications: true
+      };
 
       if (piId) {
         setPairedPiId(piId);
 
-        // 2. If we have a Pi ID, listen to the CROP DETECTIONS
-        // NOTE: Ensure "Crop Analysis" matches what your Python script sends!
+        // 2. Listen to the CROP DETECTIONS
         const q = query(
           collection(db, "detections"),
           where("pi_id", "==", piId),
-          where("type", "in", ["Crop", "Crop Analysis"]), // Handles both variations
+          where("type", "in", ["Crop", "Crop Analysis"]), 
           orderBy("timestamp", "desc")
         );
 
-        // Clear previous detection listener if it exists
         unsubscribeDetections();
 
         unsubscribeDetections = onSnapshot(q, (querySnapshot) => {
           const detectionsData = [];
           querySnapshot.forEach((doc) => {
             const data = doc.data();
-            if (data.imageUrl) {
+            
+            // Soft Delete Filter Logic
+            if (data.imageUrl && !data.hiddenFromMain) {
               detectionsData.push({
                 id: doc.id,
                 detection: data.detection || data.primary || "Analysis",
@@ -67,12 +78,38 @@ const CropScreen = ({ navigation }) => {
           });
           setItems(detectionsData); 
           setLoading(false);
+
+          // --- SYSTEM FUNCTIONAL NOTIFICATION LOGIC ---
+          querySnapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const docId = change.doc.id;
+              if (!processedDetections.has(docId)) {
+                setProcessedDetections(prev => new Set([...prev, docId]));
+                const data = change.doc.data();
+                
+                // ONLY trigger the alert if user settings permit it
+                if (!data.hiddenFromMain && 
+                    alertSettings.immediateAlerts && 
+                    alertSettings.cropAlerts && 
+                    alertSettings.pushNotifications) {
+                    
+                  processDetectionAlert({
+                    type: 'crop',
+                    detection: data.detection || data.primary || "Crop Scan",
+                    confidence: data.score || 0,
+                  }, user.uid);
+                } else {
+                  console.log("🔕 Crop alert suppressed due to user threshold settings.");
+                }
+              }
+            }
+          });
+
         }, (error) => {
           console.error("🔥 Crop Query Error:", error);
           setLoading(false);
         });
       } else {
-        // No Pi ID found yet
         setPairedPiId(null);
         setLoading(false);
       }
@@ -87,7 +124,7 @@ const CropScreen = ({ navigation }) => {
     };
   }, [user]); 
 
-  // --- SELECTION & DELETE LOGIC ---
+  // --- SELECTION LOGIC ---
   const toggleSelect = (id) => {
     if (selectedItems.includes(id)) {
       setSelectedItems(prev => prev.filter(item => item !== id));
@@ -112,23 +149,27 @@ const CropScreen = ({ navigation }) => {
 
   const handleDeleteSelected = async () => {
     Alert.alert(
-      "Delete Reports",
-      `Are you sure you want to delete ${selectedItems.length} item(s)?`,
+      "Remove Reports",
+      `Remove ${selectedItems.length} item(s) from this screen? (They will still be saved in your Detection History for 30 days)`,
       [
         { text: "Cancel", style: "cancel" },
         { 
-          text: "Delete", 
+          text: "Remove", 
           style: "destructive",
           onPress: async () => {
             try {
               const batch = writeBatch(db);
+              
               selectedItems.forEach(docId => {
-                batch.delete(doc(db, "detections", docId));
+                const docRef = doc(db, "detections", docId);
+                batch.update(docRef, { hiddenFromMain: true });
               });
+              
               await batch.commit();
               exitSelection();
             } catch (error) {
-              Alert.alert("Error", "Could not delete items.");
+              console.error("Error hiding items:", error);
+              Alert.alert("Error", "Could not remove items.");
             }
           } 
         }
@@ -232,7 +273,7 @@ const CropScreen = ({ navigation }) => {
                 <View style={styles.emptyContainer}>
                   <Ionicons name="leaf-outline" size={50} color="#CBD5E1" />
                   <Text style={styles.emptyText}>
-                     {!pairedPiId ? "No IoT Device Paired" : "No Health Scans Yet"}
+                    {!pairedPiId ? "No IoT Device Paired" : "No Health Scans Yet"}
                   </Text>
                   {pairedPiId && <Text style={{fontSize: 10, color: '#ccc', marginTop: 5}}>ID: {pairedPiId}</Text>}
                 </View>
@@ -255,11 +296,13 @@ const CropScreen = ({ navigation }) => {
   );
 };
 
-// ... keep your styles the same
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  brandBar: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 10 },
+  brandBar: { 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 : 40, 
+    paddingHorizontal: 16, 
+    paddingBottom: 10 
+  },
   brandText: { fontWeight: '900', letterSpacing: 4, fontSize: 14, textAlign: 'center', color: '#1B4332', opacity: 0.6 },
   titleBanner: { paddingVertical: 5 },
   titleBannerText: { fontWeight: '800', fontSize: 24, letterSpacing: 1, textAlign: 'center', color: '#1B4332' },

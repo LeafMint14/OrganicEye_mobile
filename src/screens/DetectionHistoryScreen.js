@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ImageBackground, FlatList, Image,
-  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView
+  View, Text, StyleSheet, ImageBackground, FlatList,
+  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView,
+  Platform, StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { db } from '../../firebase';
-import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from 'firebase/firestore';
+// --- ADDED Timestamp TO IMPORTS ---
+import { collection, query, where, orderBy, onSnapshot, writeBatch, doc, getDocs, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
@@ -28,6 +30,37 @@ const DetectionHistoryScreen = ({ navigation }) => {
 
     let unsubscribe = () => {};
 
+    // --- 30-DAY GARBAGE COLLECTION LOGIC ---
+    const cleanupOldDetections = async (piId) => {
+      try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        // CRITICAL FIX: Convert JS Date to Firebase Timestamp for accurate querying
+        const fbTimestamp = Timestamp.fromDate(thirtyDaysAgo);
+
+        const oldDetectionsQuery = query(
+          collection(db, "detections"),
+          where("pi_id", "==", piId),
+          where("timestamp", "<", fbTimestamp)
+        );
+
+        const snapshot = await getDocs(oldDetectionsQuery);
+        
+        if (!snapshot.empty) {
+          const batch = writeBatch(db);
+          snapshot.forEach(docSnap => {
+            // This is a HARD delete. It permanently wipes it from the database.
+            batch.delete(docSnap.ref);
+          });
+          await batch.commit();
+          console.log(`🧹 Cleaned up ${snapshot.size} detections older than 30 days.`);
+        }
+      } catch (error) {
+        console.error("Error cleaning up old detections. (Note: You may need to build a composite index in Firebase for this):", error);
+      }
+    };
+
     const fetchUserDataAndSubscribe = async () => {
       try {
         const userResult = await UserService.getUserData(user.uid);
@@ -36,7 +69,10 @@ const DetectionHistoryScreen = ({ navigation }) => {
           const piId = userResult.userData.pairedPiId;
           setPairedPiId(piId);
 
-          // Query all detections for this pi_id, ordered by timestamp desc
+          // 1. Run the background cleanup task first
+          await cleanupOldDetections(piId);
+
+          // 2. Query ALL detections for this pi_id (ignoring 'hiddenFromMain')
           const q = query(
             collection(db, "detections"),
             where("pi_id", "==", piId),
@@ -72,6 +108,7 @@ const DetectionHistoryScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [user]);
 
+  // --- SELECTION & NAVIGATION LOGIC ---
   const handleItemPress = (item) => {
     if (isSelectMode) {
       const isSelected = selectedItems.includes(item.id);
@@ -81,10 +118,9 @@ const DetectionHistoryScreen = ({ navigation }) => {
         setSelectedItems([...selectedItems, item.id]);
       }
     } else {
-      // Navigate to details based on type
-      if (item.type === 'Insect') {
+      if (item.type === 'Insect' || item.type === 'Insect Detection') {
         navigation.navigate('InsectDetails', { item });
-      } else if (item.type === 'Crop') {
+      } else if (item.type === 'Crop' || item.type === 'Crop Analysis') {
         navigation.navigate('CropDetailsScreen', { item });
       }
     }
@@ -97,28 +133,28 @@ const DetectionHistoryScreen = ({ navigation }) => {
     }
   };
 
+  // --- MANUAL HARD DELETE ---
   const deleteSelectedItems = async () => {
     if (selectedItems.length === 0) return;
 
     Alert.alert(
-      'Delete Detections',
-      `Are you sure you want to delete ${selectedItems.length} detection(s)?`,
+      'Permanently Delete',
+      `Are you sure you want to permanently delete ${selectedItems.length} detection(s)? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Delete Forever',
           style: 'destructive',
           onPress: async () => {
             try {
               const batch = writeBatch(db);
               selectedItems.forEach(id => {
                 const docRef = doc(db, "detections", id);
-                batch.delete(docRef);
+                batch.delete(docRef); // Hard Delete for the master history screen
               });
               await batch.commit();
               setSelectedItems([]);
               setIsSelectMode(false);
-              Alert.alert('Success', 'Detections deleted successfully');
             } catch (error) {
               console.error("Error deleting detections:", error);
               Alert.alert('Error', 'Failed to delete detections');
@@ -156,6 +192,8 @@ const DetectionHistoryScreen = ({ navigation }) => {
       resizeMode="cover"
     >
       <SafeAreaView style={styles.safeArea}>
+        
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -177,11 +215,20 @@ const DetectionHistoryScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* 30-Day Note Banner */}
+        <View style={styles.infoBanner}>
+          <Ionicons name="information-circle" size={18} color="#1B4332" />
+          <Text style={styles.infoBannerText}>
+            Note: Detection data is automatically permanently deleted after 30 days to save space.
+          </Text>
+        </View>
+
+        {/* List Content */}
         {items.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="document-outline" size={64} color="#666" />
             <Text style={styles.emptyText}>No detections found</Text>
-            <Text style={styles.emptySubtext}>Detection history will appear here</Text>
+            <Text style={styles.emptySubtext}>Your full detection history will appear here</Text>
           </View>
         ) : (
           <FlatList
@@ -219,7 +266,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 12 : 45, 
+    paddingBottom: 12,
     backgroundColor: 'rgba(31, 122, 79, 0.9)',
   },
   backButton: { padding: 8 },
@@ -227,6 +275,22 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   headerButton: { padding: 8, marginLeft: 8 },
   countText: { fontSize: 14, color: '#fff', opacity: 0.8 },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#C8E6C9',
+  },
+  infoBannerText: {
+    fontSize: 12,
+    color: '#1B4332',
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, ImageBackground, FlatList, Image,
-  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView 
+  TouchableOpacity, ActivityIndicator, Alert, SafeAreaView,
+  Platform, StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { db } from '../../firebase'; 
@@ -30,11 +31,18 @@ const InsectScreen = ({ navigation }) => {
     let unsubscribeUser = () => {};
     let unsubscribeDetections = () => {};
 
-    // 1. Listen for Pairing (Real-time)
+    // 1. Listen for Pairing & Settings (Real-time)
     const userDocRef = doc(db, "users", user.uid);
     unsubscribeUser = onSnapshot(userDocRef, (userDocSnap) => {
       const userData = userDocSnap.data();
       const piId = userData?.pairedPiId;
+      
+      // --- GRAB THE USER'S CUSTOM ALERT SETTINGS ---
+      const alertSettings = userData?.alertSettings || {
+        immediateAlerts: true,
+        insectAlerts: true,
+        pushNotifications: true
+      };
 
       if (piId) {
         setPairedPiId(piId);
@@ -52,7 +60,9 @@ const InsectScreen = ({ navigation }) => {
           const detectionsData = [];
           querySnapshot.forEach((doc) => {
             const data = doc.data();
-            if (data.imageUrl) {
+            
+            // Soft Delete Filter
+            if (data.imageUrl && !data.hiddenFromMain) {
               detectionsData.push({
                 id: doc.id,
                 detection: data.detection || data.primary || "Unknown Insect",
@@ -65,18 +75,28 @@ const InsectScreen = ({ navigation }) => {
           setItems(detectionsData); 
           setLoading(false);
 
-          // Notification Logic
+          // --- SYSTEM FUNCTIONAL NOTIFICATION LOGIC ---
           querySnapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const docId = change.doc.id;
               if (!processedDetections.has(docId)) {
                 setProcessedDetections(prev => new Set([...prev, docId]));
                 const data = change.doc.data();
-                processDetectionAlert({
-                  type: 'insect',
-                  detection: data.detection || data.primary || "Unknown Insect",
-                  confidence: data.score || Math.round(data.confidence * 100) || 0,
-                }, user.uid);
+                
+                // ONLY trigger the alert if user settings permit it
+                if (!data.hiddenFromMain && 
+                    alertSettings.immediateAlerts && 
+                    alertSettings.insectAlerts && 
+                    alertSettings.pushNotifications) {
+                    
+                  processDetectionAlert({
+                    type: 'insect',
+                    detection: data.detection || data.primary || "Unknown Insect",
+                    confidence: data.score || Math.round(data.confidence * 100) || 0,
+                  }, user.uid);
+                } else {
+                  console.log("🔕 Insect alert suppressed due to user threshold settings.");
+                }
               }
             }
           });
@@ -107,20 +127,36 @@ const InsectScreen = ({ navigation }) => {
   };
 
   const handleDeleteSelected = async () => {
-    Alert.alert("Delete", `Delete ${selectedItems.length} items?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-          const batch = writeBatch(db);
-          selectedItems.forEach(id => batch.delete(doc(db, "detections", id)));
-          await batch.commit();
-          setIsSelectMode(false);
-          setSelectedItems([]);
-        } 
-      }
-    ]);
+    Alert.alert(
+      "Remove Detections", 
+      `Remove ${selectedItems.length} items from this screen? (They will still be saved in your Detection History for 30 days)`, 
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Remove", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              const batch = writeBatch(db);
+              
+              selectedItems.forEach(id => {
+                const docRef = doc(db, "detections", id);
+                batch.update(docRef, { hiddenFromMain: true });
+              });
+              
+              await batch.commit();
+              setIsSelectMode(false);
+              setSelectedItems([]);
+            } catch (error) {
+              console.error("Error hiding items:", error);
+              Alert.alert("Error", "Could not remove items.");
+            }
+          } 
+        }
+      ]
+    );
   };
 
-  // --- THIS IS THE RENDERITEM FUNCTION THAT WAS MISSING ---
   const renderItem = ({ item }) => {
     const isSelected = selectedItems.includes(item.id);
     const isBeneficial = item.detection.toLowerCase().includes('ladybug') || item.detection.toLowerCase().includes('bee');
@@ -162,7 +198,12 @@ const InsectScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           ) : (
-            <Text style={styles.titleBannerText}>INSECT DATA</Text>
+            <>
+              <Text style={styles.brandText}>ORGANIC-EYE</Text>
+              <View style={styles.titleBanner}>
+                <Text style={styles.titleBannerText}>INSECT DATA</Text>
+              </View>
+            </>
           )}
         </View>
 
@@ -172,7 +213,7 @@ const InsectScreen = ({ navigation }) => {
           ) : (
             <FlatList
               data={items}
-              renderItem={renderItem} // <--- Reference to the function above
+              renderItem={renderItem} 
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContainer}
               ListEmptyComponent={
@@ -195,9 +236,14 @@ const InsectScreen = ({ navigation }) => {
     </ImageBackground>
   );
 };
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  brandBar: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 10 },
+  brandBar: { 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 : 40, 
+    paddingHorizontal: 16, 
+    paddingBottom: 10 
+  },
   brandText: { fontWeight: '900', letterSpacing: 4, fontSize: 14, textAlign: 'center', color: '#1B4332', opacity: 0.6 },
   titleBanner: { paddingVertical: 5 },
   titleBannerText: { fontWeight: '800', fontSize: 24, letterSpacing: 1, textAlign: 'center', color: '#1B4332' },

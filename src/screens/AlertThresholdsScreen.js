@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Switch, Alert, ImageBackground, ActivityIndicator, BackHandler,
-  TextInput, Modal
+  TextInput, Modal, Platform, StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
 import { db } from '../../firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import { showDetectionAlert } from '../services/NotificationService';
 
 // Threshold types configuration
@@ -39,6 +38,7 @@ const AlertThresholdsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [originalSettings, setOriginalSettings] = useState(null);
+  const [pairedPiId, setPairedPiId] = useState(null); 
 
   // Modal states for threshold editing
   const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
@@ -48,35 +48,17 @@ const AlertThresholdsScreen = ({ navigation }) => {
   // Validation states
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Check if running in Expo Go on Android (push notifications not supported)
-  const isExpoGoAndroid = !!(Constants.appOwnership === 'expo' && Constants.platform?.android);
-
-  // Alert threshold settings
+  // Core IoT Alert threshold settings
   const [settings, setSettings] = useState({
-    // Detection thresholds
     highRiskEnabled: true,
     mediumRiskEnabled: true,
     lowRiskEnabled: false,
-    minConfidence: 70, // Minimum confidence percentage
-
-    // Notification preferences
-    pushNotifications: !isExpoGoAndroid, // Disable by default on Expo Go Android
-    inAppAlerts: true,
-    emailAlerts: false,
-
-    // Frequency settings
-    immediateAlerts: true,
-    dailySummary: false,
-    weeklyReport: true,
-
-    // Specific detection types
+    minConfidence: 70, 
     insectAlerts: true,
     cropAlerts: true,
     unknownAlerts: false,
-
-    // Threshold values
-    highRiskThreshold: 90, // Confidence for high risk
-    mediumRiskThreshold: 75, // Confidence for medium risk
+    highRiskThreshold: 90, 
+    mediumRiskThreshold: 75, 
   });
 
   useEffect(() => {
@@ -94,39 +76,22 @@ const AlertThresholdsScreen = ({ navigation }) => {
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Save',
-              onPress: () => saveAlertSettings(true) // Pass true to navigate back after save
+              onPress: () => saveAlertSettings(true)
             }
           ]
         );
-        return true; // Prevent default back action
+        return true; 
       }
-      return false; // Allow default back action
+      return false; 
     };
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
     return () => backHandler.remove();
   }, [settings, originalSettings]);
 
   const hasUnsavedChanges = () => {
     if (!originalSettings) return false;
     return JSON.stringify(settings) !== JSON.stringify(originalSettings);
-  };
-
-  const handlePushNotificationToggle = async (value) => {
-    if (value && isExpoGoAndroid) {
-      // Show message that push notifications aren't available in Expo Go on Android
-      Alert.alert(
-        'Push Notifications Unavailable',
-        'Push notifications are not supported in Expo Go on Android. To use push notifications, please create a development build.\n\nLearn more: https://docs.expo.dev/develop/development-builds/introduction/',
-        [{ text: 'OK' }]
-      );
-      return; // Don't enable
-    }
-
-    // For other platforms, just enable without requesting permissions
-    // (permissions are handled in NotificationService if needed)
-    updateSetting('pushNotifications', value);
   };
 
   const loadAlertSettings = async () => {
@@ -139,6 +104,11 @@ const AlertThresholdsScreen = ({ navigation }) => {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        
+        if (userData.pairedPiId) {
+          setPairedPiId(userData.pairedPiId);
+        }
+
         let loadedSettings = { ...settings };
         if (userData.alertSettings) {
           loadedSettings = { ...settings, ...userData.alertSettings };
@@ -157,10 +127,10 @@ const AlertThresholdsScreen = ({ navigation }) => {
     }
   };
 
+  // --- REAL SYSTEM FUNCTIONALITY FOR IOT SYNC ---
   const saveAlertSettings = async (shouldNavigateBack = false) => {
     if (!user?.uid) return;
 
-    // Validate settings before saving
     if (!validateSettings()) {
       Alert.alert('Validation Error', 'Please fix the validation errors before saving.');
       return;
@@ -168,20 +138,39 @@ const AlertThresholdsScreen = ({ navigation }) => {
 
     Alert.alert(
       'Confirm Changes',
-      'Are you sure you want to save these alert threshold settings? Changes will take effect immediately.',
+      'Save these alert thresholds? They will be synced to your IoT device immediately.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Save Settings',
+          text: 'Save & Sync',
           style: 'default',
           onPress: async () => {
             setSaving(true);
             try {
+              // 1. Save to User Profile for mobile app logic
               await UserService.updateUserData(user.uid, {
                 alertSettings: settings
               });
-              setOriginalSettings(settings); // Update original settings after save
-              Alert.alert('Success', 'Alert settings saved successfully', [
+
+              // 2. Push to IoT Device via Firebase Digital Twin
+              if (pairedPiId) {
+                await setDoc(doc(db, 'device_settings', pairedPiId), {
+                  alertSettings: {
+                    highRiskThreshold: settings.highRiskThreshold,
+                    mediumRiskThreshold: settings.mediumRiskThreshold,
+                    minConfidence: settings.minConfidence,
+                    highRiskEnabled: settings.highRiskEnabled,
+                    mediumRiskEnabled: settings.mediumRiskEnabled,
+                    lowRiskEnabled: settings.lowRiskEnabled,
+                  },
+                  updatedAt: serverTimestamp()
+                }, { merge: true });
+                
+                console.log(`⚙️ [IOT SYNC] Alert thresholds pushed to ${pairedPiId}`);
+              }
+
+              setOriginalSettings(settings); 
+              Alert.alert('Success', 'Alert settings saved and synced to IoT successfully', [
                 {
                   text: 'OK',
                   onPress: () => {
@@ -205,13 +194,11 @@ const AlertThresholdsScreen = ({ navigation }) => {
 
   const updateSetting = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
-    // Clear validation errors when user makes changes
     if (validationErrors[key]) {
       setValidationErrors(prev => ({ ...prev, [key]: undefined }));
     }
   };
 
-  // Threshold editing functions
   const openThresholdEditor = (thresholdType, currentValue) => {
     setEditingThreshold(thresholdType);
     setTempThresholdValue(currentValue.toString());
@@ -225,7 +212,6 @@ const AlertThresholdsScreen = ({ navigation }) => {
       return;
     }
 
-    // Validate threshold relationships
     if (editingThreshold?.key === 'highRiskThreshold' && value <= settings.mediumRiskThreshold) {
       Alert.alert('Invalid Threshold', 'High risk threshold must be greater than medium risk threshold.');
       return;
@@ -244,7 +230,6 @@ const AlertThresholdsScreen = ({ navigation }) => {
     setEditingThreshold(null);
   };
 
-  // Validate all settings
   const validateSettings = () => {
     const errors = {};
 
@@ -283,12 +268,6 @@ const AlertThresholdsScreen = ({ navigation }) => {
               mediumRiskEnabled: true,
               lowRiskEnabled: false,
               minConfidence: 70,
-              pushNotifications: true,
-              inAppAlerts: true,
-              emailAlerts: false,
-              immediateAlerts: true,
-              dailySummary: false,
-              weeklyReport: true,
               insectAlerts: true,
               cropAlerts: true,
               unknownAlerts: false,
@@ -364,7 +343,6 @@ const AlertThresholdsScreen = ({ navigation }) => {
         <View style={[styles.section, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Detection Thresholds</Text>
           
-          {/* Threshold Summary */}
           <View style={styles.thresholdSummary}>
             <Text style={[styles.summaryText, { color: colors.muted }]}>
               Current ranges: Low (≥{settings.minConfidence}%), Medium (≥{settings.mediumRiskThreshold}%), High (≥{settings.highRiskThreshold}%)
@@ -481,129 +459,24 @@ const AlertThresholdsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Notification Preferences Section */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Notification Preferences</Text>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Receive push notifications on your device
-                {isExpoGoAndroid && (
-                  <Text style={{ color: '#ff6b6b', fontSize: 12 }}>
-                    {'\n'}Not available in Expo Go on Android. Requires development build.
-                  </Text>
-                )}
-              </Text>
-            </View>
-            <Switch
-              value={settings.pushNotifications}
-              onValueChange={handlePushNotificationToggle}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.pushNotifications ? '#fff' : '#f4f3f4'}
-              disabled={isExpoGoAndroid}
-            />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>In-App Alerts</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Show alerts within the app
-              </Text>
-            </View>
-            <Switch
-              value={settings.inAppAlerts}
-              onValueChange={(value) => updateSetting('inAppAlerts', value)}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.inAppAlerts ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Email Alerts</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Receive email notifications
-              </Text>
-            </View>
-            <Switch
-              value={settings.emailAlerts}
-              onValueChange={(value) => updateSetting('emailAlerts', value)}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.emailAlerts ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-        </View>
-
-        {/* Frequency Settings Section */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Alert Frequency</Text>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Immediate Alerts</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Get notified immediately when thresholds are met
-              </Text>
-            </View>
-            <Switch
-              value={settings.immediateAlerts}
-              onValueChange={(value) => updateSetting('immediateAlerts', value)}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.immediateAlerts ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Daily Summary</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Receive a daily summary of all detections
-              </Text>
-            </View>
-            <Switch
-              value={settings.dailySummary}
-              onValueChange={(value) => updateSetting('dailySummary', value)}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.dailySummary ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Weekly Report</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Get a weekly analytics report
-              </Text>
-            </View>
-            <Switch
-              value={settings.weeklyReport}
-              onValueChange={(value) => updateSetting('weeklyReport', value)}
-              trackColor={{ false: '#767577', true: '#1f7a4f' }}
-              thumbColor={settings.weeklyReport ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-        </View>
-
-        {/* Save Button */}
+        {/* --- NEW REDESIGNED SAVE BUTTON --- */}
         <View style={styles.saveSection}>
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: colors.primary, opacity: saving ? 0.7 : 1 }]}
-            onPress={saveAlertSettings}
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            onPress={() => saveAlertSettings(false)}
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <Ionicons name="save" size={20} color="#fff" />
-                <Text style={styles.saveButtonText}>Save Settings</Text>
+                <Ionicons name="checkmark-circle-outline" size={24} color="#fff" />
+                <Text style={styles.saveButtonText}>Apply Settings</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
+
       </ScrollView>
 
       {/* Threshold Editing Modal */}
@@ -667,10 +540,10 @@ const AlertThresholdsScreen = ({ navigation }) => {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
+                style={[styles.modalButton, styles.saveModalButton]}
                 onPress={saveThresholdValue}
               >
-                <Text style={styles.saveButtonText}>Save Threshold</Text>
+                <Text style={styles.saveModalButtonText}>Save Threshold</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -695,7 +568,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 15 : 50,
+    paddingBottom: 12,
     backgroundColor: 'rgba(31, 122, 79, 0.9)',
   },
   backButton: { padding: 8 },
@@ -728,17 +602,39 @@ const styles = StyleSheet.create({
   settingInfo: { flex: 1, marginRight: 16 },
   settingTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   settingSubtitle: { fontSize: 14, lineHeight: 18 },
-  saveSection: { padding: 16, paddingBottom: 32 },
+  
+  // --- REDESIGNED SAVE BUTTON STYLES ---
+  saveSection: { 
+    paddingHorizontal: 20, 
+    paddingTop: 15,
+    paddingBottom: 40 
+  },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f7a4f',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: '#2D6A4F', // Darker, richer green
+    borderRadius: 30, // Modern pill shape
+    paddingVertical: 16,
+    elevation: 6, // Stronger shadow for Android
+    shadowColor: '#1B4332', // Colored drop shadow for iOS
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
     gap: 8,
   },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  saveButtonDisabled: {
+    opacity: 0.7,
+    elevation: 2,
+    shadowOpacity: 0.1,
+  },
+  saveButtonText: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    letterSpacing: 0.5 
+  },
+  
   thresholdValue: {
     textDecorationLine: 'underline',
     fontWeight: '600',
@@ -800,8 +696,8 @@ const styles = StyleSheet.create({
   },
   cancelButton: { backgroundColor: '#6c757d' },
   cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  saveButton: { backgroundColor: '#1f7a4f' },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  saveModalButton: { backgroundColor: '#1f7a4f' },
+  saveModalButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
 
 export default AlertThresholdsScreen;

@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, SafeAreaView, ActivityIndicator 
+  Modal, TouchableOpacity, SafeAreaView, ActivityIndicator,
+  Platform, StatusBar // <-- Added Platform and StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { getCropInsight } from '../config/LabelMap';
@@ -19,7 +20,7 @@ const CropDetailsScreen = ({ route, navigation }) => {
   
   // Modals & Features States
   const [webModalVisible, setWebModalVisible] = useState(false);
-  const [imageModalVisible, setImageModalVisible] = useState(false); // NEW: Image Modal State
+  const [imageModalVisible, setImageModalVisible] = useState(false); 
   const [currentUrl, setCurrentUrl] = useState('');
   const [modalTitle, setModalTitle] = useState(''); 
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -289,7 +290,15 @@ const CropDetailsScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  // <-- Updated header style below: replaced paddingVertical with dynamic paddingTop and standard paddingBottom
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 40,
+    paddingBottom: 10 
+  },
   headerTitle: { color: '#1B4332', fontWeight: '900', fontSize: 13, letterSpacing: 2 },
   audioAction: { padding: 5 },
   scrollBody: { paddingHorizontal: 16, paddingBottom: 40 },

@@ -1,7 +1,8 @@
 ﻿import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, Animated, SafeAreaView 
+  Modal, TouchableOpacity, Animated, SafeAreaView,
+  Platform, StatusBar // <-- Added Platform and StatusBar
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { getInsectInsight } from '../config/LabelMap'; 
@@ -191,7 +192,15 @@ const InsectDetailsScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centerError: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  brandBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  // <-- Updated header style below to dynamically add status bar height
+  brandBar: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 40,
+    paddingBottom: 10 
+  },
   brandText: { fontWeight: '900', letterSpacing: 2, fontSize: 16, color: '#1B4332' },
   heroSection: { paddingHorizontal: 16, marginTop: 10 },
   imageFrame: { width: '100%', height: 220, borderRadius: 25, overflow: 'hidden', elevation: 10, backgroundColor: '#000' },

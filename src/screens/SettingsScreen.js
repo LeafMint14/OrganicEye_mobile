@@ -1,14 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Image, ImageBackground, ActivityIndicator, Linking, Share, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, ImageBackground, ActivityIndicator, Linking, Share, TextInput } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
 import { Ionicons } from '@expo/vector-icons';
 
 const SettingsScreen = ({ navigation }) => {
-  const [notifications, setNotifications] = useState(true);
-  // const [autoDetection, setAutoDetection] = useState(false);
-  const [dataSync, setDataSync] = useState(true);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,7 +78,6 @@ const SettingsScreen = ({ navigation }) => {
         { name: 'Edit Profile', icon: 'person-outline', action: 'profile' },
         { name: 'Change Password', icon: 'lock-closed-outline', action: 'password' },
         { name: 'Privacy Settings', icon: 'shield-checkmark-outline', action: 'privacy' },
-        // { name: 'Account Security', icon: 'security-outline', action: 'security' },
       ]
     },
     {
@@ -90,27 +86,14 @@ const SettingsScreen = ({ navigation }) => {
         { name: 'Register IoT Device', icon: 'qr-code-outline', action: 'registerIoT' },
         { name: 'Detection Settings', icon: 'camera-outline', action: 'detection' },
         { name: 'Alert Thresholds', icon: 'notifications-outline', action: 'alerts' },
-        // { name: 'Field Management', icon: 'leaf-outline', action: 'fields' },
         { name: 'Detection History', icon: 'time-outline', action: 'history' },
         { name: 'Analytics Module', icon: 'analytics-outline', action: 'analytics' },
       ]
     },
-    // {
-    //   title: 'Data & Storage',
-    //   items: [
-    //     { name: 'Data Export', icon: 'download-outline', action: 'export' },
-    //     { name: 'Storage Usage', icon: 'analytics-outline', action: 'storage' },
-    //     { name: 'Backup Settings', icon: 'cloud-upload-outline', action: 'backup' },
-    //     { name: 'Clear Cache', icon: 'trash-outline', action: 'clearCache' },
-    //   ]
-    // },
     {
       title: 'Support',
       items: [
-        // { name: 'Help Center', icon: 'help-circle-outline', action: 'help' },
         { name: 'Contact Support', icon: 'mail-outline', action: 'contact' },
-        // { name: 'Rate App', icon: 'star-outline', action: 'rate' },
-        // { name: 'Share App', icon: 'share-outline', action: 'share' },
         { name: 'About', icon: 'information-circle-outline', action: 'about' },
       ]
     }
@@ -510,43 +493,6 @@ const SettingsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Preferences with Dark mode */}
-        <View style={styles.toggleSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Preferences</Text>
-
-          {/* <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
-            <View style={styles.toggleInfo}>
-              <Text style={[styles.toggleTitle, { color: colors.text }]}>Dark Mode</Text>
-              <Text style={[styles.toggleDescription, { color: colors.muted }]}>Switch between light and dark theme</Text>
-            </View>
-            <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View> */}
-          
-          <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
-            <View style={styles.toggleInfo}>
-              <Text style={[styles.toggleTitle, { color: colors.text }]}>Push Notifications</Text>
-              <Text style={[styles.toggleDescription, { color: colors.muted }]}>Receive alerts and updates</Text>
-            </View>
-            <Switch value={notifications} onValueChange={setNotifications} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View>
-
-          {/* <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
-            <View style={styles.toggleInfo}>
-              <Text style={[styles.toggleTitle, { color: colors.text }]}>Auto Detection</Text>
-              <Text style={[styles.toggleDescription, { color: colors.muted }]}>Automatically detect insects</Text>
-            </View>
-            <Switch value={autoDetection} onValueChange={setAutoDetection} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View> */}
-
-          <View style={[styles.toggleItem, { backgroundColor: colors.card }]}> 
-            <View style={styles.toggleInfo}>
-              <Text style={[styles.toggleTitle, { color: colors.text }]}>Data Sync</Text>
-              <Text style={[styles.toggleDescription, { color: colors.muted }]}>Sync data across devices</Text>
-            </View>
-            <Switch value={dataSync} onValueChange={setDataSync} trackColor={{ false: '#9ca3af', true: colors.primary }} thumbColor={'#fff'} />
-          </View>
-        </View>
-
         {filteredSettingsOptions.length > 0 ? (
           filteredSettingsOptions.map((section, sectionIndex) => (
             <View key={sectionIndex} style={styles.section}>
@@ -596,240 +542,237 @@ const SettingsScreen = ({ navigation }) => {
   );
 };
 
-// ... (Your styles are perfect, no changes) ...
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 12,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginRight: 14,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  profileEmail: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#e8f5e9',
-  },
-  profileContact: {
-    marginTop: 2,
-    fontSize: 12,
-    color: '#e8f5e9',
+  bg: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginRight: 14,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  profileEmail: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#e8f5e9',
+  },
+  profileContact: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#e8f5e9',
  },
-  roleBadge: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleBadgeDot: {
-    color: '#F6C453',
-    marginRight: 6,
-    fontSize: 16,
-  },
-  roleBadgeText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  editBtn: {
-    backgroundColor: '#1f7a4f',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  editBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  sectionHeader: {
-   flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  searchSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#2c3e50',
-  },
-  detailItem: {
-    padding: 15,
-    borderBottomWidth: 1,
+  roleBadge: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeDot: {
+    color: '#F6C453',
+    marginRight: 6,
+    fontSize: 16,
+  },
+  roleBadgeText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  editBtn: {
+    backgroundColor: '#1f7a4f',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  editBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  sectionHeader: {
+   flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  searchSection: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#2c3e50',
+  },
+  detailItem: {
+    padding: 15,
+    borderBottomWidth: 1,
  borderBottomColor: '#f1f2f6',
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#7f8c8d',
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: '#2c3e50',
-    fontWeight: '500',
-  },
-  toggleSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  toggleSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
 },
-  toggleItem: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  toggleInfo: {
-    flex: 1,
-  },
-  toggleTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 2,
-  },
-  toggleDescription: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
+  toggleItem: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  toggleInfo: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
  optionsContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  optionItem: {
-    padding: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  optionLeft: {
-    flexDirection: 'row',
-   alignItems: 'center',
-    flex: 1,
-  },
-  optionIcon: {
-    marginRight: 15,
-  },
-  optionName: {
-    fontSize: 16,
-    color: '#2c3e50',
-    fontWeight: '500',
-  },
-  optionArrow: {
-    marginLeft: 10,
-  },
-  logoutSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  logoutButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 15,
-
-
-borderRadius: 10,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  optionItem: {
+    padding: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f2f6',
+  },
+  optionLeft: {
+    flexDirection: 'row',
+   alignItems: 'center',
+    flex: 1,
+  },
+  optionIcon: {
+    marginRight: 15,
+  },
+  optionName: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  optionArrow: {
+    marginLeft: 10,
+  },
+  logoutSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  logoutButton: {
+    backgroundColor: '#e74c3c',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
 },
-  logoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  noResultsContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  noResultsSubtext: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
+  logoutText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  noResultsSubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
 });
 
 export default SettingsScreen;

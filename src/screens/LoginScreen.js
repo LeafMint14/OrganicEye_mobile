@@ -1,5 +1,8 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Image, ImageBackground, ActivityIndicator } from 'react-native';
+import { 
+  View, Text, StyleSheet, TextInput, TouchableOpacity, 
+  Alert, ScrollView, Image, ImageBackground, ActivityIndicator 
+} from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +14,7 @@ const LoginScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { theme, colors } = useTheme();
+  const { colors } = useTheme();
   const { login, resetPassword } = useAuth();
 
   const handleLogin = async () => {
@@ -28,13 +31,10 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    
     try {
       const result = await login(email, password);
-      
       if (result.success) {
         Alert.alert('Success', 'Login successful!');
-        // Navigation will happen automatically due to AuthContext state change
       } else {
         Alert.alert('Login Failed', result.error);
       }
@@ -51,7 +51,6 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       Alert.alert('Error', 'Please enter a valid email address');
@@ -59,7 +58,6 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setResetLoading(true);
-
     try {
       const result = await resetPassword(email);
       if (result.success) {
@@ -81,6 +79,7 @@ const LoginScreen = ({ navigation }) => {
       resizeMode="cover"
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* --- Added significant margin here --- */}
         <View style={styles.heroWrapper}>
           <Image
             source={require('../../assets/background.png')}
@@ -90,8 +89,10 @@ const LoginScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Sign In</Text>
-          <Text style={[styles.subtitle, { color: '#000000ff',  fontWeight: 'bold' }]}>Welcome back to your account</Text>
+          <Text style={[styles.title, { color: '#ffffff' }]}>Sign In</Text>
+          <Text style={[styles.subtitle, { color: '#000000ff', fontWeight: 'bold' }]}>
+            Welcome back to your account
+          </Text>
         </View>
 
         <View style={styles.form}>
@@ -128,10 +129,10 @@ const LoginScreen = ({ navigation }) => {
           <View style={styles.rowBetween}>
             <TouchableOpacity style={styles.remember} onPress={() => setRemember(r => !r)} disabled={loading}>
               <View style={[styles.checkbox, remember && styles.checkboxChecked]} />
-              <Text style={[styles.rememberText, { color: colors.text }]}>Remember me</Text>
+              <Text style={[styles.rememberText, { color: '#ffffff' }]}>Remember me</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleForgotPassword} disabled={loading || resetLoading}>
-              <Text style={[styles.forgotText, { color: '#FFFFFF',  fontWeight: 'bold'  }]}>
+              <Text style={[styles.forgotText, { color: '#FFFFFF', fontWeight: 'bold' }]}>
                 {resetLoading ? 'Sending...' : 'Forget Password?'}
               </Text>
             </TouchableOpacity>
@@ -150,9 +151,11 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: '#1eff00ff',  fontWeight: 'bold' }]}>Don't have an account? </Text>
+            <Text style={[styles.footerText, { color: '#1eff00ff', fontWeight: 'bold' }]}>
+              Don't have an account? 
+            </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Signup')} disabled={loading}>
-              <Text style={[styles.footerLink, { color: '#FFFFFF',  fontWeight: 'bold' }]}>Sign Up</Text>
+              <Text style={[styles.footerLink, { color: '#FFFFFF', fontWeight: 'bold' }]}> Sign Up</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -164,34 +167,46 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: 24 },
-  heroWrapper: { marginTop: 20, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
+  heroWrapper: { 
+    marginTop: 60, // Increased from 20 to 60 for more top space
+    marginHorizontal: 16, 
+    borderRadius: 20, 
+    overflow: 'hidden',
+    elevation: 5, // Adds a slight shadow to the hero image
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
   heroImage: { width: '100%', height: 200 },
-  header: { paddingHorizontal: 16, marginTop: 20, marginBottom: 8 },
-  title: { fontSize: 28, fontWeight: '800', color: '#ffffff', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#e8f5e9' },
-  form: { paddingHorizontal: 16, marginTop: 20 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, paddingHorizontal: 12, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  header: { paddingHorizontal: 16, marginTop: 24, marginBottom: 8 },
+  title: { fontSize: 28, fontWeight: '800', marginBottom: 4 },
+  subtitle: { fontSize: 16 },
+  form: { paddingHorizontal: 16, marginTop: 12 },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    borderRadius: 12, 
+    paddingHorizontal: 12, 
+    marginBottom: 16, 
+    elevation: 2,
+    height: 55,
+  },
   inputIcon: { marginRight: 8 },
-  iconText: { fontSize: 16 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#2e7d32' },
+  iconText: { fontSize: 18 },
+  input: { flex: 1, fontSize: 16 },
   eyeIcon: { padding: 10 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   remember: { flexDirection: 'row', alignItems: 'center' },
-  checkbox: { width: 16, height: 16, borderWidth: 2, borderColor: '#2e7d32', borderRadius: 3, marginRight: 8 },
-  checkboxChecked: { backgroundColor: '#2e7d32' },
-  rememberText: { fontSize: 14, color: '#ffffff' },
-  forgotText: { fontSize: 14, color: '#2e7d32' },
-  loginButton: { backgroundColor: '#1f7a4f', borderRadius: 12, paddingVertical: 14, marginTop: 8 },
-  loginButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  divider: { flex: 1, height: 1, backgroundColor: '#2e7d32' },
-  dividerText: { marginHorizontal: 12, fontSize: 14, color: '#2e7d32' },
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  socialBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-  socialText: { fontSize: 18, fontWeight: '700', color: '#2e7d32' },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  footerText: { fontSize: 14, color: '#2e7d32' },
-  footerLink: { fontSize: 14, color: '#2e7d32', fontWeight: '600' },
+  checkbox: { width: 18, height: 18, borderWidth: 2, borderColor: '#ffffff', borderRadius: 4, marginRight: 8 },
+  checkboxChecked: { backgroundColor: '#1f7a4f', borderColor: '#1f7a4f' },
+  rememberText: { fontSize: 14 },
+  forgotText: { fontSize: 14 },
+  loginButton: { borderRadius: 12, paddingVertical: 16, marginTop: 8, elevation: 3 },
+  loginButtonText: { color: '#ffffff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 30 },
+  footerText: { fontSize: 15 },
+  footerLink: { fontSize: 15 },
 });
 
 export default LoginScreen;
