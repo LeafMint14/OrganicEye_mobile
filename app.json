@@ -18,8 +18,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff",
+        "googleServicesFile": "./google-services.json"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.organiceye.app",

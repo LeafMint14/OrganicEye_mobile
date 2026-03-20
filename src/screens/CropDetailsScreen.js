@@ -2,7 +2,7 @@
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
   Modal, TouchableOpacity, SafeAreaView, ActivityIndicator,
-  Platform, StatusBar // <-- Added Platform and StatusBar
+  Platform, StatusBar 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { getCropInsight } from '../config/LabelMap';
@@ -32,7 +32,10 @@ const CropDetailsScreen = ({ route, navigation }) => {
   let score = fullData.score || fullData.healthScore || fullData.confidence || 0;
   if (score < 1 && score > 0) score = Math.round(score * 100); 
 
+  // --- NEW ANOMALY LOGIC ---
   const isHealthy = rawDiagnosis.toLowerCase().includes('healthy') || score > 85;
+  const isAnomaly = rawDiagnosis.toLowerCase().includes('unidentified');
+  
   const imageUrl = fullData.imageUrl || fullData.img?.uri;
   
   // 2. Date and Time Logic
@@ -75,12 +78,13 @@ const CropDetailsScreen = ({ route, navigation }) => {
     fetchFullDocument();
   }, [item]);
 
-  // Fallback insight
+  // Fetch expert insight from LabelMap
   const insight = getCropInsight(primaryDiagnosis) || {
     title: "General Plant Care",
     description: `Symptoms detected: ${rawDiagnosis}.`,
     medicalDetail: "Requires multi-step systemic approach.",
     treatmentSteps: "1. Isolate plant.\n2. Ensure proper watering.\n3. Apply organic neem oil.\n4. Monitor daily.",
+    source: "Consult local agricultural extension.",
     youtubeId: null
   };
 
@@ -91,7 +95,7 @@ const CropDetailsScreen = ({ route, navigation }) => {
       setIsSpeaking(false);
     } else {
       setIsSpeaking(true);
-      const textToRead = `Diagnostic Report for ${detectionDate}. Detected: ${rawDiagnosis}. ${insight.title}. ${insight.description}. Steps: ${insight.treatmentSteps}`;
+      const textToRead = `Diagnostic Report for ${detectionDate}. Detected: ${rawDiagnosis}. ${insight.title}. ${insight.medicalDetail}. Steps: ${insight.treatmentSteps}`;
       Speech.speak(textToRead, {
         onDone: () => setIsSpeaking(false),
         onStopped: () => setIsSpeaking(false),
@@ -130,15 +134,17 @@ const CropDetailsScreen = ({ route, navigation }) => {
 
         <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
           
-          {/* 🖼️ HERO IMAGE (NOW CLICKABLE) */}
+          {/* 🖼️ HERO IMAGE */}
           <TouchableOpacity 
             activeOpacity={0.9} 
             onPress={() => setImageModalVisible(true)} 
             style={styles.heroCard}
           >
             <Image source={{ uri: imageUrl }} style={styles.mainImage} />
-            <View style={[styles.statusBadge, { backgroundColor: isHealthy ? '#2D6A4F' : '#BC4749' }]}>
-              <Text style={styles.statusText}>{isHealthy ? "HEALTHY" : "UNHEALTHY"}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: isAnomaly ? '#475569' : (isHealthy ? '#2D6A4F' : '#BC4749') }]}>
+              <Text style={styles.statusText}>
+                {isAnomaly ? "⚠️ ANOMALY" : (isHealthy ? "HEALTHY" : "UNHEALTHY")}
+              </Text>
             </View>
             <View style={styles.expandIcon}>
               <Ionicons name="expand" size={18} color="#FFF" />
@@ -173,7 +179,7 @@ const CropDetailsScreen = ({ route, navigation }) => {
                         <View key={label} style={styles.confidenceRow}>
                             <Text style={styles.confLabel}>{label}</Text>
                             <View style={styles.barContainer}>
-                                <View style={[styles.barFill, {width: `${confPercent}%`, backgroundColor: isHealthy ? '#2D6A4F' : '#BC4749'}]} />
+                                <View style={[styles.barFill, {width: `${confPercent}%`, backgroundColor: isAnomaly ? '#475569' : (isHealthy ? '#2D6A4F' : '#BC4749')}]} />
                             </View>
                             <Text style={styles.confValue}>{confPercent}%</Text>
                         </View>
@@ -185,47 +191,49 @@ const CropDetailsScreen = ({ route, navigation }) => {
                 
                 <View style={styles.statusRow}>
                     <Text style={styles.labelSmall}>STATUS</Text>
-                    <Text style={[styles.statusResult, {color: isHealthy ? '#2D6A4F' : '#BC4749'}]}>
-                        {isHealthy ? "Optimal Condition" : "Intervention Required"}
+                    <Text style={[styles.statusResult, {color: isAnomaly ? '#475569' : (isHealthy ? '#2D6A4F' : '#BC4749')}]}>
+                        {isAnomaly ? "Foreign Matter Detected" : (isHealthy ? "Optimal Condition" : "Intervention Required")}
                     </Text>
                 </View>
             </View>
           </View>
 
-          {/* 🌿 CROP & CONDITION INFORMATION */}
+          {/* 🔬 AGRONOMIC PATHOLOGY (DYNAMIC EXPERT INFO) */}
           <View style={styles.sheet}>
-            <Text style={styles.infoHeading}>WHAT IS PECHAY (BOK CHOY)?</Text>
+            <Text style={styles.infoHeading}>BIOLOGICAL MECHANISM</Text>
             <Text style={styles.infoPara}>
-              Pechay (Brassica rapa L.) is a popular leafy vegetable in the Philippines, essential for food security. It thrives in well-drained soil with plenty of sunlight.
+              {insight.medicalDetail}
             </Text>
             
             <View style={styles.divider} />
             
-            <Text style={styles.infoHeading}>OFFICIAL RESOURCES</Text>
-            <Text style={styles.infoPara}>
-              Access the legal agricultural guides from the Department of Agriculture for your specific detections:
+            <Text style={styles.infoHeading}>EXPERT RESOURCES</Text>
+            <Text style={[styles.infoPara, { fontStyle: 'italic', fontSize: 12 }]}>
+              {insight.source}
             </Text>
 
             {detectedIssues.map((issue, index) => {
               const displayIssue = issue.charAt(0).toUpperCase() + issue.slice(1);
+              
+              const smartSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(issue + ' Brassica rapa pechay site:.gov OR site:.edu')}`;
+              
               return (
                 <TouchableOpacity 
                   key={index}
                   style={styles.webLinkBtn}
-                  onPress={() => openWebResource('https://www.buplant.da.gov.ph/', `DA-BPI Guide: ${displayIssue}`)}
+                  onPress={() => openWebResource(smartSearchUrl, `Academic Journals: ${displayIssue}`)}
                 >
-                    <Ionicons name="globe-outline" size={18} color="#2D6A4F" />
-                    <Text style={styles.webLinkText}>View DA-BPI Guide for {displayIssue}</Text>
+                    <Ionicons name="library-outline" size={18} color="#2D6A4F" />
+                    <Text style={styles.webLinkText}>Search .gov & .edu Databases</Text>
                     <Ionicons name="open-outline" size={18} color="#2D6A4F" style={{marginLeft: 'auto'}} />
                 </TouchableOpacity>
               );
             })}
-
           </View>
 
           {/* 🩺 RECOMMENDED TREATMENT */}
-          <View style={[styles.sheet, { borderLeftWidth: 5, borderLeftColor: '#2D6A4F' }]}>
-            <Text style={styles.treatmentLabel}>PRIMARY TREATMENT ({primaryDiagnosis.toUpperCase()})</Text>
+          <View style={[styles.sheet, { borderLeftWidth: 5, borderLeftColor: isAnomaly ? '#475569' : '#2D6A4F' }]}>
+            <Text style={styles.treatmentLabel}>IPM TREATMENT PROTOCOL</Text>
             <Text style={styles.treatmentTitle}>{insight.title}</Text>
             
             <Text style={styles.treatmentSteps}>
@@ -234,7 +242,7 @@ const CropDetailsScreen = ({ route, navigation }) => {
 
             {insight.youtubeId && (
               <TouchableOpacity 
-                style={styles.videoBtn}
+                style={[styles.videoBtn, {backgroundColor: isAnomaly ? '#475569' : '#BC4749'}]}
                 onPress={() => openWebResource(`https://www.youtube.com/embed/${insight.youtubeId}?autoplay=1`, 'Treatment Video Guide')}
               >
                 <Ionicons name="logo-youtube" size={20} color="#FFF" />
@@ -243,7 +251,7 @@ const CropDetailsScreen = ({ route, navigation }) => {
             )}
             
             <Text style={styles.legalNotice}>
-              *Consult with a local agriculturist for precise chemical applications. (Ref: DOST-PCAARRD)
+              *Apply treatments according to Integrated Pest Management (IPM) safety standards. 
             </Text>
           </View>
         </ScrollView>
@@ -290,7 +298,6 @@ const CropDetailsScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  // <-- Updated header style below: replaced paddingVertical with dynamic paddingTop and standard paddingBottom
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -303,14 +310,12 @@ const styles = StyleSheet.create({
   audioAction: { padding: 5 },
   scrollBody: { paddingHorizontal: 16, paddingBottom: 40 },
   
-  // HERO CARD UPDATES
   heroCard: { backgroundColor: '#FFF', borderRadius: 20, overflow: 'hidden', elevation: 5, marginBottom: 10, position: 'relative' },
   mainImage: { width: '100%', height: 200, resizeMode: 'cover' },
   statusBadge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   statusText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
   expandIcon: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', padding: 6, borderRadius: 20 },
   
-  // IMAGE MODAL STYLES
   imageModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
   closeImageBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
   fullImage: { width: '100%', height: '80%', resizeMode: 'contain' },
@@ -352,7 +357,7 @@ const styles = StyleSheet.create({
   treatmentLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1 },
   treatmentTitle: { fontSize: 18, fontWeight: '800', color: '#1B4332', marginVertical: 8 },
   treatmentSteps: { fontSize: 14, color: '#475569', lineHeight: 24, marginBottom: 20 },
-  videoBtn: { backgroundColor: '#BC4749', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 12 },
+  videoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 12 },
   videoBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 10, fontSize: 12 },
   legalNotice: { fontSize: 10, color: '#94A3B8', marginTop: 15, textAlign: 'center' },
   

@@ -25,6 +25,9 @@ import { CROP_LABELS, INSECT_LABELS } from "../config/LabelMap";
 import ViewShot from "react-native-view-shot";
 import * as Print from "expo-print";
 import * as MediaLibrary from "expo-media-library";
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import * as XLSX from 'xlsx';
 import { useAuth } from "../context/AuthContext";
 import { Ionicons } from '@expo/vector-icons';
 
@@ -34,10 +37,14 @@ const AnalyticsScreen = ({ navigation }) => {
   const { colors } = useTheme();
 
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [overviewData, setOverviewData] = useState({ detections: 0, fields: 0, healthScore: 0 });
   const [cropHealthChartData, setCropHealthChartData] = useState([]);
   const [insectChartData, setInsectChartData] = useState([]);
   const [insights, setInsights] = useState([]);
+  
+  // State to hold the raw data for our exports
+  const [reportData, setReportData] = useState([]); 
   const [pairedPiId, setPairedPiId] = useState(null);
 
   const reportRef = useRef();
@@ -72,7 +79,6 @@ const AnalyticsScreen = ({ navigation }) => {
 
         const startDate = getStartDate(selectedPeriod);
 
-        // Fetch detections filtered by the paired Raspberry Pi ID
         const q = query(
           collection(db, "detections"),
           where("pi_id", "==", piId),
@@ -85,11 +91,11 @@ const AnalyticsScreen = ({ navigation }) => {
           let totalDetections = 0;
           const healthCounts = {};
           const insectCounts = {};
+          const rawTableData = []; // Store raw data for Excel/CSV/PDF
 
           querySnapshot.forEach((doc) => {
             totalDetections++;
             const data = doc.data();
-            // Checking multiple fields to ensure we capture the detection name correctly
             const name = (data.detection || data.primary || data.label || "Unknown").trim();
             const type = data.type || "";
 
@@ -99,21 +105,33 @@ const AnalyticsScreen = ({ navigation }) => {
             } else if (type.includes("Insect") || INSECT_LABELS.includes(name)) {
               insectCounts[name] = (insectCounts[name] || 0) + 1;
             }
+
+            // --- NEW: ANOMALY CLASSIFICATION FOR EXPORTS ---
+            const isGood = name.toLowerCase().includes('beneficial') || name.toLowerCase().includes('healthy');
+            const isAnomaly = name.toLowerCase().includes('unidentified');
+            const exportStatus = isAnomaly ? 'Anomaly' : (isGood ? 'Good' : 'Warning');
+
+            // Build Raw Data Array for Exports
+            rawTableData.push({
+              id: doc.id,
+              date: data.timestamp ? data.timestamp.toDate().toLocaleDateString() : 'N/A',
+              time: data.timestamp ? data.timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
+              detection: name,
+              confidence: data.score ? `${Math.round(data.score * 100)}%` : (data.confidence || 'N/A'),
+              status: exportStatus
+            });
           });
 
           const totalHealthy = healthCounts["Healthy"] || 0;
           const totalUnhealthy = Object.entries(healthCounts)
-            .filter(([key]) => key !== "Healthy")
+            .filter(([key]) => !key.toLowerCase().includes("healthy"))
             .reduce((sum, [_, val]) => sum + val, 0);
           
           const totalCrops = totalHealthy + totalUnhealthy;
           const healthScore = totalCrops === 0 ? 100 : Math.round((totalHealthy / totalCrops) * 100);
 
-          setOverviewData({
-            detections: totalDetections,
-            fields: 1,
-            healthScore: healthScore,
-          });
+          setOverviewData({ detections: totalDetections, fields: 1, healthScore: healthScore });
+          setReportData(rawTableData); // Save to state for instant exports
 
           setCropHealthChartData([
             { label: "Healthy", value: totalHealthy, color: "#2ecc71" },
@@ -154,11 +172,14 @@ const AnalyticsScreen = ({ navigation }) => {
       'Infected Aphid': "#9b59b6",
       'Infected Flea Beetle': "#e67e22",
       'Infected Pumpkin Beetle': "#1abc9c",
+      // --- NEW PIE CHART COLORS FOR ANOMALIES ---
+      'Unidentified Insect': "#34495E", // Dark Slate Blue
+      'Unidentified Crop': "#7F8C8D",   // Slate Gray
     };
     return map[label] || "#94A3B8";
   };
 
-  // Helper functions for SVG charts
+  // --- SVG HELPER FUNCTIONS ---
   const polarToCartesian = (cx, cy, r, angle) => {
     const rad = ((angle - 90) * Math.PI) / 180;
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -203,28 +224,118 @@ const AnalyticsScreen = ({ navigation }) => {
     </View>
   );
 
-  const onExport = () => {
-    Alert.alert("Export Report", "Choose format:", [
-      { text: "Save PNG to Gallery", onPress: async () => {
-          const uri = await reportRef.current.capture();
-          await MediaLibrary.saveToLibraryAsync(uri);
-          Alert.alert("Success", "Report image saved.");
-      }},
-      { text: "Generate PDF Document", onPress: async () => {
-          const base64 = await reportRef.current.capture({ result: "base64" });
-          await Print.printAsync({ html: `<html><body style="text-align:center;"><img src="data:image/png;base64,${base64}" style="width:95%;" /></body></html>` });
-      }},
-      { text: "Cancel", style: "cancel" },
-    ]);
+  // ==========================================
+  // EXPORT LOGIC ENGINE
+  // ==========================================
+
+  const exportToCSV = async () => {
+    setIsExporting(true);
+    if (reportData.length === 0) { Alert.alert("No Data", "No data to export."); setIsExporting(false); return; }
+    try {
+      const header = "Date,Time,Detection,Confidence,Status\n";
+      const rows = reportData.map(row => `${row.date},${row.time},${row.detection},${row.confidence},${row.status}`).join('\n');
+      const fileUri = `${FileSystem.documentDirectory}OrganicEye_Data_${selectedPeriod}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, header + rows, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(fileUri, { dialogTitle: 'Export CSV Data' });
+    } catch (error) { Alert.alert("Export Error", error.message); }
+    setIsExporting(false);
+  };
+
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    if (reportData.length === 0) { Alert.alert("No Data", "No data to export."); setIsExporting(false); return; }
+    try {
+      const ws = XLSX.utils.json_to_sheet(reportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Detections");
+      const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const fileUri = `${FileSystem.documentDirectory}OrganicEye_Data_${selectedPeriod}.xlsx`;
+      await FileSystem.writeAsStringAsync(fileUri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(fileUri, { dialogTitle: 'Export Excel Data' });
+    } catch (error) { Alert.alert("Export Error", error.message); }
+    setIsExporting(false);
+  };
+
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    if (reportData.length === 0) { Alert.alert("No Data", "No data to export."); setIsExporting(false); return; }
+    try {
+      // 1. Capture the visual charts as a Base64 image
+      const chartBase64 = await reportRef.current.capture({ result: "base64" });
+
+      // 2. Generate Data Table (Updated to color-code Anomalies)
+      const tableRows = reportData.map(item => {
+        let statusColor = '#e74c3c'; // Warning red
+        if (item.status === 'Good') statusColor = '#2ecc71';
+        if (item.status === 'Anomaly') statusColor = '#34495E'; // Slate gray for Anomaly
+        
+        return `
+          <tr>
+            <td>${item.date}</td>
+            <td>${item.time}</td>
+            <td><strong>${item.detection}</strong></td>
+            <td>${item.confidence}</td>
+            <td style="color: ${statusColor}; font-weight: bold;">${item.status}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // 3. Build HTML combining the Image + Table
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Helvetica', sans-serif; padding: 20px; color: #333; }
+              h1 { color: #1B4332; text-align: center; border-bottom: 2px solid #1B4332; padding-bottom: 10px; }
+              p { text-align: center; color: #666; font-size: 14px; }
+              .chart-container { text-align: center; margin: 20px 0; }
+              img { max-width: 100%; border-radius: 10px; border: 1px solid #eee; }
+              table { width: 100%; border-collapse: collapse; margin-top: 30px; font-size: 12px; }
+              th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+              th { background-color: #2D6A4F; color: white; }
+              tr:nth-child(even) { background-color: #f8f9fa; }
+            </style>
+          </head>
+          <body>
+            <h1>Organic Eye - Official Field Diagnostic Report</h1>
+            <p>Generated on: ${new Date().toLocaleString()} | Reporting Period: Past ${selectedPeriod}</p>
+            
+            <div class="chart-container">
+               <img src="data:image/png;base64,${chartBase64}" />
+            </div>
+
+            <h2 style="color: #1B4332; margin-top: 40px;">Raw Detection Logs</h2>
+            <table>
+              <tr><th>Date</th><th>Time</th><th>Detection</th><th>Confidence</th><th>Status</th></tr>
+              ${tableRows}
+            </table>
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, { dialogTitle: 'Export PDF Report' });
+    } catch (error) { Alert.alert("Export Error", error.message); }
+    setIsExporting(false);
+  };
+
+  const saveToGallery = async () => {
+    try {
+      const uri = await reportRef.current.capture();
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert("Success", "Dashboard image saved to your gallery!");
+    } catch (error) { Alert.alert("Error", "Failed to save image."); }
   };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
+      
+      {/* EVERYTHING INSIDE VIEWSHOT GETS CAPTURED FOR THE PDF */}
       <ViewShot ref={reportRef} options={{ format: "png", quality: 0.9 }}>
-        <View style={{ backgroundColor: colors.bg }} collapsable={false}>
+        <View style={{ backgroundColor: colors.bg, paddingBottom: 10 }} collapsable={false}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Analytics Dashboard</Text>
-            <Text style={[styles.subtitle, { color: colors.muted }]}>Data Trends for Crop Health</Text>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>Data Trends & Reports</Text>
           </View>
 
           <View style={styles.periodSelector}>
@@ -267,10 +378,37 @@ const AnalyticsScreen = ({ navigation }) => {
         </View>
       </ViewShot>
 
-      <TouchableOpacity style={[styles.exportButton, { backgroundColor: colors.primary }]} onPress={onExport}>
-        <Ionicons name="download-outline" size={20} color="#fff" />
-        <Text style={styles.exportText}> Export Report</Text>
-      </TouchableOpacity>
+      {/* EXPORT ACTION BUTTONS */}
+      <View style={styles.exportSection}>
+        <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 15 }]}>Generate Reports</Text>
+        
+        {isExporting ? (
+           <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : (
+          <View style={styles.buttonGrid}>
+            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: '#E53935' }]} onPress={exportToPDF}>
+              <Ionicons name="document-text" size={20} color="#FFF" />
+              <Text style={styles.btnText}>PDF Report</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: '#43A047' }]} onPress={exportToExcel}>
+              <Ionicons name="grid" size={20} color="#FFF" />
+              <Text style={styles.btnText}>Excel Data</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: '#1E88E5' }]} onPress={exportToCSV}>
+              <Ionicons name="list" size={20} color="#FFF" />
+              <Text style={styles.btnText}>CSV Data</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: '#8E24AA' }]} onPress={saveToGallery}>
+              <Ionicons name="image" size={20} color="#FFF" />
+              <Text style={styles.btnText}>Save Graph Image</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+      <View style={{height: 40}} />
     </ScrollView>
   );
 };
@@ -303,7 +441,7 @@ const styles = StyleSheet.create({
   periodButton: { flex: 1, paddingVertical: 10, marginHorizontal: 4, borderRadius: 25, alignItems: "center", elevation: 1 },
   periodText: { fontSize: 12, fontWeight: "bold" },
   overviewSection: { paddingHorizontal: 20, marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 5 },
   overviewGrid: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
   overviewCard: { flex: 1, padding: 15, borderRadius: 15, alignItems: "center", elevation: 2 },
   overviewNumber: { fontSize: 22, fontWeight: "bold" },
@@ -314,12 +452,16 @@ const styles = StyleSheet.create({
   legendContainer: { flex: 1, paddingLeft: 15 },
   legendItem: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   legendColor: { width: 10, height: 10, borderRadius: 2, marginRight: 8 },
-  insightsSection: { paddingHorizontal: 20, marginBottom: 20 },
+  insightsSection: { paddingHorizontal: 20, marginBottom: 10 },
   insightCard: { padding: 18, borderRadius: 15, marginBottom: 12, elevation: 1 },
   insightTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 4 },
   insightDescription: { fontSize: 13, lineHeight: 18 },
-  exportButton: { margin: 20, paddingVertical: 15, borderRadius: 15, alignItems: "center", flexDirection: 'row', justifyContent: 'center', marginBottom: 60 },
-  exportText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  
+  // EXPORT STYLES
+  exportSection: { paddingHorizontal: 20, marginTop: 10 },
+  buttonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  exportBtn: { width: '48%', padding: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 2 },
+  btnText: { color: "#fff", fontSize: 13, fontWeight: "bold", marginLeft: 8 }
 });
 
 export default AnalyticsScreen;

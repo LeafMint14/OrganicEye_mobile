@@ -1,11 +1,12 @@
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 import { db } from '../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
-// Check if we're on Expo Go Android (notifications not supported)
-const isExpoGoAndroidPlatform = Constants.appOwnership === 'expo' && Constants.platform?.android;
+// Check if we're on Expo Go Android (notifications not supported in Expo Go for Android SDK 53+)
+const isExpoGoAndroidPlatform = Constants.appOwnership === 'expo' && Platform.OS === 'android';
 
-// Dynamically import Notifications only if not on Expo Go Android
 let Notifications = null;
 let NotificationsAvailable = false;
 
@@ -15,21 +16,8 @@ let NotificationsAvailable = false;
       const NotifModule = await import('expo-notifications');
       Notifications = NotifModule.default || NotifModule;
       NotificationsAvailable = true;
-    } catch (error) {
-      console.warn('Notifications module not available on this platform');
-    }
-  }
-})();
-
-/**
- * Notification utility functions for OrganicEye app
- * Handles both local notifications (works in Expo Go) and push notifications (development builds)
- */
-
-// Configure notification handler (only if Notifications module becomes available)
-setTimeout(() => {
-  if (Notifications && typeof Notifications.setNotificationHandler === 'function') {
-    try {
+      
+      // Setup handler for when notifications arrive while app is OPEN
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,
@@ -38,19 +26,20 @@ setTimeout(() => {
         }),
       });
     } catch (error) {
-      console.warn('Notification handler setup skipped');
+      console.warn('Notifications module not available on this platform');
     }
   }
-}, 100);
+})();
 
 /**
- * Request notification permissions
+ * Request notification permissions AND generate Push Token
+ * @param {string} userId - Current user's Firebase UID
  * @returns {Promise<boolean>} - True if permissions granted
  */
-export const requestNotificationPermissions = async () => {
-  // Skip if Notifications not available (Expo Go Android)
-  if (!Notifications) {
-    return true;
+export const registerForPushNotificationsAsync = async (userId) => {
+  if (!Notifications || !Device.isDevice) {
+    console.log('Must use physical device for Push Notifications');
+    return false;
   }
 
   try {
@@ -62,31 +51,52 @@ export const requestNotificationPermissions = async () => {
       finalStatus = status;
     }
 
-    return finalStatus === 'granted';
+    if (finalStatus !== 'granted') {
+      console.log('Failed to get push token for push notification!');
+      return false;
+    }
+
+    // Generate the unique Expo Push Token
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: projectId, // Make sure your app.json has a projectId if using EAS
+    });
+    
+    const expoPushToken = tokenData.data;
+    console.log('Your Expo Push Token:', expoPushToken);
+
+    // Save the token to Firebase so the Raspberry Pi can find it
+    if (userId) {
+      await updateDoc(doc(db, 'users', userId), {
+        expoPushToken: expoPushToken
+      });
+      console.log('Push token saved to Firebase profile');
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#1f7a4f',
+      });
+    }
+
+    return true;
   } catch (error) {
-    // Silently fail on unsupported platforms
-    console.warn('Notification permission request not supported on this platform');
-    return true; // Allow local notifications to continue
+    console.warn('Error fetching push token:', error);
+    return false;
   }
 };
 
 /**
- * Schedule a local notification (works in Expo Go)
- * @param {string} title - Notification title
- * @param {string} body - Notification body
- * @param {object} data - Additional data
- * @param {number} delay - Delay in seconds (optional)
+ * Schedule a local notification (Used for Fallback / Foreground alerts)
  */
 export const scheduleLocalNotification = async (title, body, data = {}, delay = 0) => {
-  // Skip if Notifications not available
-  if (!Notifications) {
-    console.warn('Notifications not available on this platform');
-    return;
-  }
+  if (!Notifications) return;
 
   try {
     const trigger = delay > 0 ? { seconds: delay } : null;
-
     await Notifications.scheduleNotificationAsync({
       content: {
         title,
@@ -98,14 +108,12 @@ export const scheduleLocalNotification = async (title, body, data = {}, delay = 
       trigger,
     });
   } catch (error) {
-    console.warn('Failed to schedule notification:', error.message);
+    console.warn('Failed to schedule local notification:', error.message);
   }
 };
 
 /**
  * Get user's alert settings from Firestore
- * @param {string} userId - User ID
- * @returns {Promise<object>} - Alert settings object
  */
 export const getUserAlertSettings = async (userId) => {
   try {
@@ -116,27 +124,16 @@ export const getUserAlertSettings = async (userId) => {
     }
     return getDefaultAlertSettings();
   } catch (error) {
-    console.error('Error fetching alert settings:', error);
     return getDefaultAlertSettings();
   }
 };
 
-/**
- * Get default alert settings
- * @returns {object} - Default settings
- */
 const getDefaultAlertSettings = () => ({
   highRiskEnabled: true,
   mediumRiskEnabled: true,
   lowRiskEnabled: false,
   minConfidence: 70,
-  // Disable push notifications only on Expo Go Android where they are unsupported
   pushNotifications: !isExpoGoAndroidPlatform,
-  inAppAlerts: true,
-  emailAlerts: false,
-  immediateAlerts: true,
-  dailySummary: false,
-  weeklyReport: true,
   insectAlerts: true,
   cropAlerts: true,
   unknownAlerts: false,
@@ -144,77 +141,41 @@ const getDefaultAlertSettings = () => ({
   mediumRiskThreshold: 75,
 });
 
-/**
- * Determine risk level based on confidence and thresholds
- * @param {number} confidence - Detection confidence percentage
- * @param {object} settings - User alert settings
- * @returns {string|null} - Risk level ('high', 'medium', 'low') or null if below minimum
- */
 export const getRiskLevel = (confidence, settings) => {
-  if (confidence < settings.minConfidence) {
-    return null; // Below minimum confidence, no alert
-  }
-
-  if (confidence >= settings.highRiskThreshold) {
-    return 'high';
-  } else if (confidence >= settings.mediumRiskThreshold) {
-    return 'medium';
-  } else {
-    return 'low';
-  }
+  if (confidence < settings.minConfidence) return null;
+  if (confidence >= settings.highRiskThreshold) return 'high';
+  if (confidence >= settings.mediumRiskThreshold) return 'medium';
+  return 'low';
 };
 
-/**
- * Check if alert should be triggered for a detection
- * @param {string} detectionType - 'insect', 'crop', or 'unknown'
- * @param {number} confidence - Detection confidence percentage
- * @param {object} settings - User alert settings
- * @returns {boolean} - True if alert should be triggered
- */
 export const shouldTriggerAlert = (detectionType, confidence, settings) => {
-  // Check if alerts are enabled for this detection type
   const typeEnabled = {
     insect: settings.insectAlerts,
     crop: settings.cropAlerts,
     unknown: settings.unknownAlerts,
   };
-
-  if (!typeEnabled[detectionType]) {
-    return false;
-  }
+  if (!typeEnabled[detectionType]) return false;
 
   const riskLevel = getRiskLevel(confidence, settings);
-
-  // Check if the risk level is enabled
   const riskEnabled = {
     high: settings.highRiskEnabled,
     medium: settings.mediumRiskEnabled,
     low: settings.lowRiskEnabled,
   };
 
-  return riskLevel && riskEnabled[riskLevel] && settings.immediateAlerts;
+  return riskLevel && riskEnabled[riskLevel];
 };
 
 /**
- * Show immediate notification for detection alerts
- * @param {string} detectionType - 'insect', 'crop', or 'unknown'
- * @param {string} detectionName - Name of detected item
- * @param {number} confidence - Confidence percentage
- * @param {object} settings - User alert settings (optional)
+ * Show immediate notification (Called during manual testing inside the app)
  */
 export const showDetectionAlert = async (detectionType, detectionName, confidence, settings = null) => {
-  if (!settings) {
-    settings = getDefaultAlertSettings();
-  }
-
-  if (!shouldTriggerAlert(detectionType, confidence, settings)) {
-    return; // Don't show alert if conditions not met
-  }
+  if (!settings) settings = getDefaultAlertSettings();
+  if (!shouldTriggerAlert(detectionType, confidence, settings)) return;
 
   const riskLevel = getRiskLevel(confidence, settings);
   const riskText = riskLevel ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1) : '';
-
-  const title = `${riskText} Risk: ${detectionType.charAt(0).toUpperCase() + detectionType.slice(1)} Detected`;
+  const title = `🚨 ${riskText} Risk: ${detectionType.charAt(0).toUpperCase() + detectionType.slice(1)} Detected`;
   const body = `${detectionName} detected with ${confidence}% confidence`;
 
   await scheduleLocalNotification(title, body, {
@@ -223,48 +184,12 @@ export const showDetectionAlert = async (detectionType, detectionName, confidenc
     detectionName,
     confidence,
     riskLevel,
-    timestamp: new Date().toISOString(),
   });
 };
 
-/**
- * Process a new detection and trigger alerts if needed
- * @param {object} detection - Detection data
- * @param {string} userId - User ID
- */
-export const processDetectionAlert = async (detection, userId) => {
-  try {
-    const settings = await getUserAlertSettings(userId);
-    const { type, detection: detectionName, confidence, score } = detection;
+export const isExpoGoAndroid = () => isExpoGoAndroidPlatform;
 
-    // Normalize confidence value
-    const confValue = score || confidence || 0;
-
-    // Map detection type
-    const detectionType = type?.toLowerCase() === 'insect' ? 'insect' :
-                         type?.toLowerCase() === 'crop' ? 'crop' : 'unknown';
-
-    await showDetectionAlert(detectionType, detectionName || 'Unknown', confValue, settings);
-  } catch (error) {
-    console.error('Error processing detection alert:', error);
-  }
-};
-
-/**
- * Check if running in Expo Go on Android (limited notification support)
- * @returns {boolean}
- */
-export const isExpoGoAndroid = () => {
-  return Constants.appOwnership === 'expo' && Constants.platform?.android;
-};
-
-/**
- * Get notification capability description
- * @returns {string}
- */
 export const getNotificationCapabilityDescription = () => {
-  if (isExpoGoAndroid()) {
-    return 'Local notifications (Expo Go limited support)';
-  }
+  if (isExpoGoAndroidPlatform) return 'Local notifications only (Expo Go limited)';
   return 'Push notifications supported';
 };

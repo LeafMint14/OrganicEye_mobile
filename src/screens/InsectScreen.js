@@ -159,11 +159,31 @@ const InsectScreen = ({ navigation }) => {
 
   const renderItem = ({ item }) => {
     const isSelected = selectedItems.includes(item.id);
-    const isBeneficial = item.detection.toLowerCase().includes('ladybug') || item.detection.toLowerCase().includes('bee');
+    
+    // --- NEW ANOMALY LOGIC FOR FEED HIGHLIGHTING ---
+    const normalizedDetection = item.detection.toLowerCase();
+    const isAnomaly = normalizedDetection.includes('unidentified');
+    const isBeneficial = normalizedDetection.includes('ladybug') || normalizedDetection.includes('bee') || normalizedDetection.includes('lacewing') || normalizedDetection.includes('beneficial');
+
+    // Dynamic Styling Variables
+    let statusColor = '#E63946'; // Default: Pest (Red)
+    let iconName = 'bug';
+    
+    if (isAnomaly) {
+      statusColor = '#475569'; // Slate Gray for Anomaly
+      iconName = 'warning';
+    } else if (isBeneficial) {
+      statusColor = '#2D6A4F'; // Green for Beneficial
+      iconName = 'shield-checkmark';
+    }
 
     return (
       <TouchableOpacity 
-        style={[styles.diagnosticCard, isSelected && styles.selectedCard]}
+        style={[
+          styles.diagnosticCard, 
+          isAnomaly && !isSelected && styles.anomalyCard, // Highlight Unidentified items
+          isSelected && styles.selectedCard
+        ]}
         onLongPress={() => handleLongPress(item.id)}
         onPress={() => isSelectMode ? toggleSelect(item.id) : navigation.navigate('InsectDetails', { item })}
       >
@@ -173,10 +193,20 @@ const InsectScreen = ({ navigation }) => {
           )}
           <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} />
           <View style={styles.cardInfo}>
-            <Text style={[styles.cardStatus, { color: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>{item.detection}</Text>
+            <Text style={[styles.cardStatus, { color: statusColor }]} numberOfLines={1}>
+               {isAnomaly ? `⚠️ Anomaly: ${item.detection}` : item.detection}
+            </Text>
             <Text style={styles.cardTime}>
               {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleDateString() : 'Just now'} • {item.confidence}%
             </Text>
+          </View>
+
+          <View style={styles.iconCircle}>
+             <Ionicons 
+                name={iconName} 
+                size={22} 
+                color={statusColor} 
+             />
           </View>
         </View>
       </TouchableOpacity>
@@ -255,11 +285,20 @@ const styles = StyleSheet.create({
     marginTop: 10, elevation: 15, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10,
   },
   historyTitle: { fontSize: 16, fontWeight: '800', color: '#64748B', paddingHorizontal: 25, paddingTop: 25, paddingBottom: 15 },
-  listContainer: { paddingHorizontal: 20, paddingBottom: 100 },
+  listContainer: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20 },
   diagnosticCard: {
     backgroundColor: '#FFF', borderRadius: 18, padding: 12, marginBottom: 12,
     borderWidth: 1, borderColor: '#F1F5F9', elevation: 2,
   },
+  
+  // --- NEW ANOMALY STYLING ---
+  anomalyCard: { 
+    borderColor: '#94A3B8', 
+    backgroundColor: '#F8FAFC', 
+    borderWidth: 1.5 
+  },
+  // ---------------------------
+  
   selectedCard: { borderColor: '#1B4332', backgroundColor: '#F0FFF4', borderWidth: 2 },
   cardMain: { flexDirection: 'row', alignItems: 'center' },
   checkboxContainer: { marginRight: 10 },
@@ -270,11 +309,11 @@ const styles = StyleSheet.create({
   iconCircle: { alignItems: 'flex-end', width: 40 },
   actionContainer: {
     position: 'absolute', bottom: 0, left: 0, right: 0, height: 90, backgroundColor: '#FFF',
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
     paddingHorizontal: 30, paddingBottom: 20, borderTopWidth: 1, borderTopColor: '#F1F5F9', elevation: 20,
   },
   actionButton: { alignItems: 'center' },
-  actionText: { fontSize: 11, fontWeight: '800', color: '#E74C3C', marginTop: 4 },
+  actionText: { fontSize: 13, fontWeight: '900', color: '#E74C3C' },
   selectedCount: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   emptyContainer: { flex: 1, alignItems: 'center', marginTop: 100 },
   emptyText: { marginTop: 10, color: '#94A3B8', fontWeight: '700', textAlign: 'center' }

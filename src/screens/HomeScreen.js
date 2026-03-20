@@ -9,6 +9,9 @@ import { db } from '../../firebase';
 import { doc, collection, query, where, orderBy, onSnapshot, limit, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons'; 
 
+// --- NEW: Import the Push Notification Registration ---
+import { registerForPushNotificationsAsync } from '../services/NotificationService';
+
 // Helper function to format timestamps
 const formatTimeAgo = (timestamp) => {
   if (!timestamp) return 'Just now';
@@ -78,6 +81,11 @@ const HomeScreen = ({ navigation }) => {
       return;
     }
 
+    // --- NEW: Trigger Push Notification Token Generation ---
+    // This will ask the user for permission (if not already granted)
+    // and save the token to their Firebase user document.
+    registerForPushNotificationsAsync(user.uid);
+
     let unsubscribeUser = () => {};
     let unsubscribeDetections = () => {};
     let unsubscribeStats = () => {};
@@ -145,7 +153,7 @@ const HomeScreen = ({ navigation }) => {
     { title: 'Insect Detection', icon: 'bug', screen: 'Insect' },
     { title: 'Crop Monitoring', icon: 'leaf', screen: 'Crop' },
     { title: 'Analytics', icon: 'stats-chart', screen: 'Analytics' },
-    { title: 'Settings', icon: 'Settings', screen: 'Settings' },
+    { title: 'Settings', icon: 'settings', screen: 'Settings' }, 
   ];
 
   return (
@@ -222,7 +230,6 @@ const HomeScreen = ({ navigation }) => {
                     key={activity.id} 
                     style={[styles.activityItem, { backgroundColor: colors.card }]}
                     onPress={() => navigation.navigate(
-                      // FIX: Changed 'CropDetails' to 'CropDetailsScreen' to match Navigator
                       status.text === 'Good' ? 'CropDetailsScreen' : 'InsectDetails', 
                       { item: { id: activity.id, name: activity.detection, img: { uri: activity.imageUrl }, ...activity } }
                     )}

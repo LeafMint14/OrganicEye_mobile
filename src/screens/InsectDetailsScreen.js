@@ -1,189 +1,303 @@
-﻿import React, { useRef, useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, ImageBackground, ScrollView, 
-  Modal, TouchableOpacity, Animated, SafeAreaView,
-  Platform, StatusBar // <-- Added Platform and StatusBar
+  Modal, TouchableOpacity, SafeAreaView, ActivityIndicator,
+  Platform, StatusBar 
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { getInsectInsight } from '../config/LabelMap'; 
+import { getInsectInsight } from '../config/LabelMap';
 import * as Speech from 'expo-speech';
+import { WebView } from 'react-native-webview';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
-import YoutubeIframe from 'react-native-youtube-iframe'; // Ensure this is installed
 
 const InsectDetailsScreen = ({ route, navigation }) => {
   const { item } = route.params || {};
+  const [fullData, setFullData] = useState(item || {});
+  const [loadingFullData, setLoadingFullData] = useState(true);
   
-  // --- FIX 1: DATA MAPPING ---
-  // We check for both 'detection' (IoT) and 'name' (Manual/Legacy)
-  const insectName = item?.detection || item?.name || "Unknown";
-  const insectScore = item?.score || item?.confidence || 0;
-  // --- FIX 2: IMAGE URL HANDLING ---
-  const insectImage = item?.imageUrl || item?.img || null;
-
-  const [previewVisible, setPreviewVisible] = useState(false);
+  // Modals & Features States
+  const [webModalVisible, setWebModalVisible] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false); 
+  const [currentUrl, setCurrentUrl] = useState('');
+  const [modalTitle, setModalTitle] = useState(''); 
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [videoModalVisible, setVideoModalVisible] = useState(false);
-  const [playing, setPlaying] = useState(false);
   
-  const insight = getInsectInsight(insectName);
-  const isBeneficial = insectName.toLowerCase().includes('beneficial') || 
-                       insectName.toLowerCase().includes('bee') || 
-                       insectName.toLowerCase().includes('ladybug');
+  const { user } = useAuth();
 
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-      setIsSpeaking(false);
-    };
-  }, []); 
+  // 1. Core Data Extraction
+  const rawDiagnosis = fullData.detection || fullData.name || "Unknown Insect";
+  let score = fullData.score || fullData.confidence || 0;
+  if (score < 1 && score > 0) score = Math.round(score * 100); 
 
-  if (!item) {
-    return (
-      <View style={styles.centerError}>
-        <Text style={{color: '#64748B'}}>No insect data found.</Text>
-      </View>
-    );
+  // --- NEW ANOMALY LOGIC ---
+  const isBeneficial = rawDiagnosis.toLowerCase().includes('beneficial');
+  const isAnomaly = rawDiagnosis.toLowerCase().includes('unidentified');
+  
+  const imageUrl = fullData.imageUrl || fullData.img?.uri || fullData.img;
+  
+  // 2. Date and Time Logic
+  let detectionDate = "Unknown Date";
+  let detectionTime = "Unknown Time";
+  if (fullData.timestamp) {
+    const dateObj = fullData.timestamp.toDate ? fullData.timestamp.toDate() : new Date(fullData.timestamp);
+    detectionDate = dateObj.toLocaleDateString();
+    detectionTime = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
   }
 
-  const startReading = () => {
-    const textToSpeak = `${insight.title}. ${insight.description}`;
-    setIsSpeaking(true);
-    Speech.speak(textToSpeak, {
-      language: 'en-US',
-      onDone: () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-    });
+  // 3. Basis / Confidence Logic
+  let basis = fullData.basis || {};
+  if (Object.keys(basis).length === 0 && rawDiagnosis) {
+    basis[rawDiagnosis] = score > 1 ? score / 100 : score; 
+  }
+
+  // Determine Primary Insect
+  const detectedIssues = rawDiagnosis.split(',').map(issue => issue.trim()).filter(issue => issue.length > 0);
+  const primaryDiagnosis = detectedIssues.length > 0 ? detectedIssues[0] : "Unknown";
+
+  useEffect(() => {
+    const fetchFullDocument = async () => {
+      if (!item?.id) {
+        setLoadingFullData(false);
+        return;
+      }
+      try {
+        const docRef = doc(db, "detections", item.id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setFullData(prev => ({ ...prev, ...docSnap.data() }));
+        }
+      } catch (e) {
+        console.log("Error fetching full details:", e);
+      } finally {
+        setLoadingFullData(false);
+      }
+    };
+    fetchFullDocument();
+  }, [item]);
+
+  // Fetch Insight
+  const insight = getInsectInsight(primaryDiagnosis);
+
+  // --- TEXT TO SPEECH LOGIC ---
+  const toggleSpeech = () => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+      const textToRead = `Insect Diagnostic Report for ${detectionDate}. Detected: ${rawDiagnosis}. ${insight.title}. ${insight.description}.`;
+      Speech.speak(textToRead, {
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+        pitch: 1.0,
+        rate: 0.9,
+      });
+    }
   };
 
-  const stopReading = () => {
-    Speech.stop();
-    setIsSpeaking(false);
+  useEffect(() => {
+    return () => Speech.stop();
+  }, []);
+
+  // --- WEBVIEW LOGIC ---
+  const openWebResource = (url, title) => {
+    setCurrentUrl(url);
+    setModalTitle(title);
+    setWebModalVisible(true);
   };
+
+  if (!item) return null;
 
   return (
     <ImageBackground source={require('../../assets/backgroundimage.png')} style={styles.container}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{flex: 1}}>
         
         {/* HEADER */}
-        <View style={styles.brandBar}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={28} color="#1B4332" />
           </TouchableOpacity>
-          <Text style={styles.brandText}>INSECT REPORT</Text>
-          <View style={{ width: 28 }} /> 
+          <Text style={styles.headerTitle}>INSECT REPORT</Text>
+          <TouchableOpacity onPress={toggleSpeech} style={styles.audioAction}>
+            <Ionicons name={isSpeaking ? "stop-circle" : "volume-high"} size={26} color="#1B4332" />
+          </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
           
-          {/* HERO IMAGE SECTION */}
-          <View style={styles.heroSection}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewVisible(true)} style={styles.imageFrame}>
-              {/* --- FIX 3: CORRECT IMAGE SOURCE SYNTAX --- */}
-              {insectImage ? (
-                  <Image source={{ uri: insectImage }} style={styles.heroImage} />
-              ) : (
-                  <View style={[styles.heroImage, {backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center'}]}>
-                      <Ionicons name="image-outline" size={50} color="#fff"/>
-                  </View>
-              )}
-              
-              <View style={[styles.badge, { backgroundColor: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
-                <Text style={styles.badgeText}>{isBeneficial ? 'BENEFICIAL' : 'PEST'}</Text>
-              </View>
-            </TouchableOpacity>
+          {/* 🖼️ HERO IMAGE */}
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => setImageModalVisible(true)} 
+            style={styles.heroCard}
+          >
+            {imageUrl ? (
+                <Image source={{ uri: imageUrl }} style={styles.mainImage} />
+            ) : (
+                <View style={[styles.mainImage, {backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center'}]}>
+                    <Ionicons name="bug-outline" size={50} color="#fff"/>
+                </View>
+            )}
+            
+            <View style={[styles.statusBadge, { backgroundColor: isAnomaly ? '#475569' : (isBeneficial ? '#2D6A4F' : '#BC4749') }]}>
+              <Text style={styles.statusText}>
+                {isAnomaly ? "⚠️ ANOMALY" : (isBeneficial ? "BENEFICIAL" : "PEST")}
+              </Text>
+            </View>
+            <View style={styles.expandIcon}>
+              <Ionicons name="expand" size={18} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+
+          {/* ⏰ TIME & DATE SECTION */}
+          <View style={styles.timeSection}>
+            <Ionicons name="time-outline" size={18} color="#64748B" />
+            <Text style={styles.timeText}>Detected on {detectionDate} at {detectionTime}</Text>
           </View>
 
-          {/* QUICK STATS SHEET */}
+          {/* 📊 BASIS OF ANALYSIS SECTION */}
           <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>DETECTION SUMMARY</Text>
-            <View style={styles.infoGrid}>
-              <View style={styles.infoRow}>
-                <Ionicons name="bug" size={18} color="#64748B" />
-                <Text style={styles.label}>Identity:</Text>
-                <Text style={[styles.value, { fontWeight: '800', color: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
-                   {insectName}
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="analytics" size={18} color="#64748B" />
-                <Text style={styles.label}>Confidence:</Text>
-                <Text style={styles.value}>{insectScore}%</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="calendar" size={18} color="#64748B" />
-                <Text style={styles.label}>Detected:</Text>
-                <Text style={styles.value}>
-                    {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleDateString() : 'Just now'}
-                </Text>
-              </View>
+            <View style={styles.sheetHeader}>
+               <Ionicons name="analytics" size={20} color="#1B4332" />
+               <Text style={styles.sheetTitle}>BASIS OF ANALYSIS</Text>
+            </View>
+            <View style={styles.divider} />
+            
+            <View style={styles.analysisBox}>
+                <Text style={styles.labelSmall}>IDENTITY</Text>
+                <Text style={styles.detectionMain}>{rawDiagnosis}</Text>
+                
+                <Text style={[styles.labelSmall, {marginTop: 15}]}>CONFIDENCE LEVELS</Text>
+                {Object.keys(basis).length > 0 ? (
+                    Object.entries(basis).map(([label, confidence]) => {
+                      const confDecimal = confidence > 1 ? confidence / 100 : confidence;
+                      const confPercent = Math.round(confDecimal * 100);
+                      
+                      return (
+                        <View key={label} style={styles.confidenceRow}>
+                            <Text style={styles.confLabel}>{label}</Text>
+                            <View style={styles.barContainer}>
+                                <View style={[styles.barFill, {width: `${confPercent}%`, backgroundColor: isAnomaly ? '#475569' : (isBeneficial ? '#2D6A4F' : '#BC4749')}]} />
+                            </View>
+                            <Text style={styles.confValue}>{confPercent}%</Text>
+                        </View>
+                      )
+                    })
+                ) : (
+                    <Text style={styles.emptyText}>Processing confidence scores...</Text>
+                )}
+                
+                <View style={styles.statusRow}>
+                    <Text style={styles.labelSmall}>STATUS</Text>
+                    <Text style={[styles.statusResult, {color: isAnomaly ? '#475569' : (isBeneficial ? '#2D6A4F' : '#BC4749')}]}>
+                        {isAnomaly ? "Foreign Organism Detected" : (isBeneficial ? "Ecosystem Ally" : "Pest Intervention Required")}
+                    </Text>
+                </View>
             </View>
           </View>
 
-          {/* AI INSIGHTS SHEET */}
-          <View style={[styles.sheet, { marginTop: 15 }]}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>AI INSIGHTS</Text>
-              <TouchableOpacity 
-                style={[styles.listenButton, { backgroundColor: isSpeaking ? '#BC4749' : '#1B4332' }]}
-                onPress={isSpeaking ? stopReading : startReading}
-              >
-                <Ionicons name={isSpeaking ? "stop" : "volume-medium"} size={16} color="#FFF" />
-                <Text style={styles.listenButtonText}>{isSpeaking ? 'Stop' : 'Listen'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.insightTitle, { color: isBeneficial ? '#2D6A4F' : '#BC4749' }]}>
-              {insight.title}
+          {/* 🔬 ENTOMOLOGICAL PROFILE & RESOURCES (DYNAMIC EXPERT INFO) */}
+          <View style={styles.sheet}>
+            <Text style={styles.infoHeading}>ENTOMOLOGICAL PROFILE</Text>
+            <Text style={styles.infoPara}>
+              {insight.description}
             </Text>
-            <Text style={styles.insightDescription}>{insight.description}</Text>
-            <Text style={styles.sourceText}>{insight.source}</Text>
+            
+            <View style={styles.divider} />
+            
+            <Text style={styles.infoHeading}>EXPERT RESOURCES</Text>
+            <Text style={[styles.infoPara, { fontStyle: 'italic', fontSize: 12 }]}>
+              {insight.source}
+            </Text>
+
+            {detectedIssues.map((issue, index) => {
+              const displayIssue = issue.charAt(0).toUpperCase() + issue.slice(1);
+              
+              // Smart URL that forces Google to only search government (.gov) and academic (.edu) databases
+              const smartSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(issue + ' insect agriculture site:.gov OR site:.edu')}`;
+              
+              return (
+                <TouchableOpacity 
+                  key={index}
+                  style={styles.webLinkBtn}
+                  onPress={() => openWebResource(smartSearchUrl, `Academic Journals: ${displayIssue}`)}
+                >
+                    <Ionicons name="library-outline" size={18} color="#2D6A4F" />
+                    <Text style={styles.webLinkText}>Search .gov & .edu Databases</Text>
+                    <Ionicons name="open-outline" size={18} color="#2D6A4F" style={{marginLeft: 'auto'}} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* 🌍 ECOLOGICAL IMPACT & ACTION */}
+          <View style={[styles.sheet, { borderLeftWidth: 5, borderLeftColor: isAnomaly ? '#475569' : (isBeneficial ? '#2D6A4F' : '#BC4749') }]}>
+            <Text style={styles.treatmentLabel}>ECOLOGICAL CLASSIFICATION</Text>
+            <Text style={styles.treatmentTitle}>{insight.title}</Text>
+            
+            <Text style={styles.treatmentSteps}>
+              {isAnomaly 
+                ? "This organism is not in the standard target database. Keep a close eye on your crop to see if this organism causes damage or acts as a beneficial predator."
+                : (isBeneficial 
+                    ? "Maintain a pesticide-free environment to encourage these beneficial populations. They are actively contributing to your garden's natural pest control."
+                    : "Immediate monitoring required. Implement Integrated Pest Management (IPM) strategies to mitigate population growth and prevent crop damage.")}
+            </Text>
 
             {insight.youtubeId && (
               <TouchableOpacity 
-                style={styles.playButton}
-                onPress={() => { setPlaying(true); setVideoModalVisible(true); }}
+                style={[styles.videoBtn, { backgroundColor: isAnomaly ? '#475569' : (isBeneficial ? '#1B4332' : '#BC4749') }]}
+                onPress={() => openWebResource(`https://www.youtube.com/embed/${insight.youtubeId}?autoplay=1`, 'Educational Video Guide')}
               >
-                <Ionicons name="logo-youtube" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                <Text style={styles.playButtonText}>Watch Educational Video</Text>
+                <Ionicons name="logo-youtube" size={20} color="#FFF" />
+                <Text style={styles.videoBtnText}>WATCH EDUCATIONAL VIDEO</Text>
               </TouchableOpacity>
             )}
+            
+            <Text style={styles.legalNotice}>
+              *Apply physical or chemical controls according to Integrated Pest Management (IPM) safety standards.
+            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>
 
-      {/* VIDEO MODAL */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={videoModalVisible}
-        onRequestClose={() => { setVideoModalVisible(false); setPlaying(false); }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.videoWrapper}>
-            <YoutubeIframe
-              height={220}
-              play={playing}
-              videoId={insight.youtubeId}
-            />
-            <TouchableOpacity 
-              style={styles.closeButton} 
-              onPress={() => { setVideoModalVisible(false); setPlaying(false); }}
-            >
-              <Text style={styles.closeButtonText}>Close Video</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+       {/* FULL SCREEN IMAGE MODAL */}
+       <Modal visible={imageModalVisible} transparent={true} animationType="fade" onRequestClose={() => setImageModalVisible(false)}>
+         <View style={styles.imageModalContainer}>
+           <TouchableOpacity style={styles.closeImageBtn} onPress={() => setImageModalVisible(false)}>
+             <Ionicons name="close-circle" size={40} color="#FFF"/>
+           </TouchableOpacity>
+           {imageUrl && <Image source={{ uri: imageUrl }} style={styles.fullImage} />}
+         </View>
+       </Modal>
 
-      {/* IMAGE PREVIEW MODAL */}
-      <Modal visible={previewVisible} transparent={true} onRequestClose={() => setPreviewVisible(false)}>
-        <View style={styles.modalContainer}>
-            <TouchableOpacity style={{position: 'absolute', top: 40, right: 20, zIndex: 10}} onPress={() => setPreviewVisible(false)}>
-                <Ionicons name="close-circle" size={40} color="#FFF"/>
-            </TouchableOpacity>
-            {insectImage && <Image source={{ uri: insectImage }} style={{width: '100%', height: 400, resizeMode: 'contain'}} />}
-        </View>
-      </Modal>
+       {/* UNIVERSAL WEBPAGE VIEWER MODAL */}
+       <Modal visible={webModalVisible} animationType="slide" presentationStyle="pageSheet">
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+            <View style={styles.webHeader}>
+              <TouchableOpacity onPress={() => setWebModalVisible(false)} style={styles.webCloseBtn}>
+                <Ionicons name="close" size={28} color="#1B4332" />
+                <Text style={styles.webCloseText}>Close</Text>
+              </TouchableOpacity>
+              <Text style={styles.webTitle}>{modalTitle}</Text>
+              <View style={{ width: 70 }} /> 
+            </View>
+            <WebView 
+              source={{ uri: currentUrl }} 
+              style={{ flex: 1 }} 
+              startInLoadingState={true}
+              allowsInlineMediaPlayback={true}
+              renderLoading={() => (
+                <View style={styles.webLoader}>
+                  <ActivityIndicator size="large" color="#1B4332" />
+                </View>
+              )}
+            />
+          </SafeAreaView>
+       </Modal>
 
     </ImageBackground>
   );
@@ -191,9 +305,7 @@ const InsectDetailsScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centerError: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  // <-- Updated header style below to dynamically add status bar height
-  brandBar: { 
+  header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'space-between', 
@@ -201,30 +313,67 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 40,
     paddingBottom: 10 
   },
-  brandText: { fontWeight: '900', letterSpacing: 2, fontSize: 16, color: '#1B4332' },
-  heroSection: { paddingHorizontal: 16, marginTop: 10 },
-  imageFrame: { width: '100%', height: 220, borderRadius: 25, overflow: 'hidden', elevation: 10, backgroundColor: '#000' },
-  heroImage: { width: '100%', height: '100%', opacity: 0.9, resizeMode: 'cover' },
-  badge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  badgeText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
-  sheet: { marginHorizontal: 16, backgroundColor: '#FFF', borderRadius: 25, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sheetTitle: { fontSize: 13, fontWeight: '800', color: '#94A3B8', letterSpacing: 1 },
-  infoGrid: { marginTop: 5 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  label: { marginLeft: 10, fontSize: 14, color: '#64748B', width: 90 },
-  value: { fontSize: 14, color: '#1E293B', flex: 1 },
-  insightTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
-  insightDescription: { fontSize: 15, color: '#475569', lineHeight: 22 },
-  sourceText: { fontSize: 11, fontStyle: 'italic', color: '#94A3B8', marginTop: 15, textAlign: 'right' },
-  listenButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 },
-  listenButtonText: { color: '#FFF', fontWeight: '800', fontSize: 12, marginLeft: 5 },
-  playButton: { marginTop: 20, backgroundColor: '#BC4749', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 15 },
-  playButtonText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
-  modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
-  videoWrapper: { backgroundColor: '#000', paddingVertical: 20 },
-  closeButton: { alignSelf: 'center', marginTop: 20, padding: 10 },
-  closeButtonText: { color: '#FFF', fontWeight: 'bold' }
+  headerTitle: { color: '#1B4332', fontWeight: '900', fontSize: 14, letterSpacing: 2 },
+  audioAction: { padding: 5 },
+  scrollBody: { paddingHorizontal: 16, paddingBottom: 40 },
+  
+  heroCard: { backgroundColor: '#FFF', borderRadius: 20, overflow: 'hidden', elevation: 5, marginBottom: 10, position: 'relative' },
+  mainImage: { width: '100%', height: 200, resizeMode: 'cover' },
+  statusBadge: { position: 'absolute', top: 15, right: 15, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  statusText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  expandIcon: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', padding: 6, borderRadius: 20 },
+  
+  imageModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  closeImageBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
+  fullImage: { width: '100%', height: '80%', resizeMode: 'contain' },
+
+  timeSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
+  timeText: { fontSize: 12, fontWeight: '700', color: '#64748B', marginLeft: 5 },
+
+  sheet: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 12, elevation: 3 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  sheetTitle: { fontSize: 12, fontWeight: '800', marginLeft: 8, color: '#64748B', letterSpacing: 1 },
+  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15 },
+  
+  analysisBox: { padding: 5 },
+  labelSmall: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1 },
+  detectionMain: { fontSize: 20, fontWeight: '800', color: '#1B4332', marginTop: 4, textTransform: 'capitalize' },
+  confidenceRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
+  confLabel: { flex: 1.5, fontSize: 13, fontWeight: '600', color: '#475569', textTransform: 'capitalize' },
+  barContainer: { flex: 2, height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, marginHorizontal: 10 },
+  barFill: { height: '100%', borderRadius: 4 },
+  confValue: { flex: 0.5, fontSize: 12, fontWeight: '800', textAlign: 'right' },
+  statusRow: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#F8FAFC', flexDirection: 'row', justifyContent: 'space-between' },
+  statusResult: { fontWeight: '900', fontSize: 13 },
+
+  infoHeading: { fontSize: 14, fontWeight: '900', color: '#1B4332', marginBottom: 8 },
+  infoPara: { fontSize: 14, color: '#475569', lineHeight: 22, marginBottom: 10 },
+  
+  webLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FFF4',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
+  },
+  webLinkText: { color: '#2D6A4F', fontWeight: '800', fontSize: 13, marginLeft: 10 },
+
+  treatmentLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1 },
+  treatmentTitle: { fontSize: 18, fontWeight: '800', color: '#1B4332', marginVertical: 8 },
+  treatmentSteps: { fontSize: 14, color: '#475569', lineHeight: 24, marginBottom: 20 },
+  videoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 12 },
+  videoBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 10, fontSize: 12 },
+  legalNotice: { fontSize: 11, color: '#94A3B8', marginTop: 15, textAlign: 'center', fontStyle: 'italic' },
+  
+  webHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  webCloseBtn: { flexDirection: 'row', alignItems: 'center' },
+  webCloseText: { fontSize: 16, color: '#1B4332', fontWeight: '600', marginLeft: 5 },
+  webTitle: { fontSize: 14, fontWeight: '800', color: '#1E293B' },
+  webLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
+  emptyText: { fontStyle: 'italic', color: '#94A3B8', fontSize: 12, marginTop: 5 }
 });
 
 export default InsectDetailsScreen;

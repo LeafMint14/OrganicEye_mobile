@@ -10,7 +10,6 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
-// --- ADDED IMPORT FOR NOTIFICATIONS ---
 import { processDetectionAlert } from '../services/NotificationService';
 
 const CropScreen = ({ navigation }) => {
@@ -179,11 +178,31 @@ const CropScreen = ({ navigation }) => {
 
   const renderItem = ({ item }) => {
     const isSelected = selectedItems.includes(item.id);
-    const isHealthy = item.detection === 'Healthy';
+    
+    // --- NEW ANOMALY LOGIC FOR FEED HIGHLIGHTING ---
+    const normalizedDetection = item.detection.toLowerCase();
+    const isAnomaly = normalizedDetection.includes('unidentified');
+    const isHealthy = normalizedDetection.includes('healthy');
+
+    // Dynamic Styling Variables
+    let statusColor = '#E63946'; // Default: Unhealthy (Red)
+    let iconName = 'alert-circle';
+    
+    if (isAnomaly) {
+      statusColor = '#475569'; // Slate Gray for Anomaly
+      iconName = 'warning';
+    } else if (isHealthy) {
+      statusColor = '#2D6A4F'; // Green for Healthy
+      iconName = 'leaf';
+    }
 
     return (
       <TouchableOpacity 
-        style={[styles.diagnosticCard, isSelected && styles.selectedCard]}
+        style={[
+          styles.diagnosticCard, 
+          isAnomaly && !isSelected && styles.anomalyCard, // Highlight Unidentified items
+          isSelected && styles.selectedCard
+        ]}
         onLongPress={() => handleLongPress(item.id)}
         onPress={() => {
           if (isSelectMode) {
@@ -214,8 +233,8 @@ const CropScreen = ({ navigation }) => {
           <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} />
           
           <View style={styles.cardInfo}>
-            <Text style={[styles.cardStatus, { color: isHealthy ? '#2D6A4F' : '#E63946' }]}>
-              {item.detection}
+            <Text style={[styles.cardStatus, { color: statusColor }]} numberOfLines={1}>
+              {isAnomaly ? `⚠️ Anomaly: ${item.detection}` : item.detection}
             </Text>
             <Text style={styles.cardTime}>
               {item.timestamp?.toDate().toLocaleDateString()} • Health Score: {item.score}/100
@@ -224,9 +243,9 @@ const CropScreen = ({ navigation }) => {
 
           <View style={styles.iconCircle}>
              <Ionicons 
-                name={isHealthy ? "leaf" : "alert-circle"} 
+                name={iconName} 
                 size={22} 
-                color={isHealthy ? "#2D6A4F" : "#E63946"} 
+                color={statusColor} 
              />
           </View>
         </View>
@@ -319,6 +338,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF', borderRadius: 18, padding: 12, marginBottom: 12,
     borderWidth: 1, borderColor: '#F1F5F9', elevation: 2,
   },
+  
+  // --- NEW ANOMALY STYLING ---
+  anomalyCard: { 
+    borderColor: '#94A3B8', 
+    backgroundColor: '#F8FAFC', 
+    borderWidth: 1.5 
+  },
+  // ---------------------------
+  
   selectedCard: { borderColor: '#1B4332', backgroundColor: '#F0FFF4', borderWidth: 2 },
   cardMain: { flexDirection: 'row', alignItems: 'center' },
   checkboxContainer: { marginRight: 10 },

@@ -1,11 +1,12 @@
-﻿import React from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
 // Import screens
+import SplashScreen from '../screens/SplashScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
@@ -97,20 +98,29 @@ function MainTabNavigator() {
 // Main App Navigator
 export default function AppNavigator() {
   const { user, loading } = useAuth();
-  
-  console.log('AppNavigator: Current user:', user ? user.email : 'null');
-  console.log('AppNavigator: Loading:', loading);
+  const [showSplash, setShowSplash] = useState(true);
 
-  // Show loading screen while checking auth state
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1f7a4f" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
+  console.log('AppNavigator: Current user:', user ? user.email : 'null');
+  console.log('AppNavigator: Auth Loading:', loading);
+
+  // This effect ensures the splash screen shows for at least a minimum amount of time
+  // even if the Firebase auth check is incredibly fast, allowing the animation to play.
+  useEffect(() => {
+    // We set a 2.5-second timer to give the SplashScreen animation time to finish.
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // --- 1. SHOW SPLASH SCREEN FIRST ---
+  // If the timer is still running, OR Firebase is still checking auth, show the Splash Screen.
+  if (showSplash || loading) {
+    return <SplashScreen />;
   }
 
+  // --- 2. SHOW MAIN APP OR AUTH SCREENS ---
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -146,18 +156,4 @@ export default function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#1f7a4f',
-    fontWeight: '500',
-  },
-});
-
+const styles = StyleSheet.create({});

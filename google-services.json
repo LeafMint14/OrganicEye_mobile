@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "76863181539",
+    "project_id": "organiceye-43911",
+    "storage_bucket": "organiceye-43911.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:76863181539:android:24650d706b66d952686bd6",
+        "android_client_info": {
+          "package_name": "com.organiceye.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "76863181539-o5t18o7gqvqnbb9r92c6478canbf62fu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6IrKgTMCcOlNbG_x0-KkhDgMfnd34t48"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "76863181539-o5t18o7gqvqnbb9r92c6478canbf62fu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
