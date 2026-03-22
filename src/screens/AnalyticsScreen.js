@@ -26,7 +26,8 @@ import ViewShot from "react-native-view-shot";
 import * as Print from "expo-print";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+// THE FIX: Pointing strictly to the legacy folder to clear the warning!
+import * as FileSystem from 'expo-file-system/legacy'; 
 import * as XLSX from 'xlsx';
 import { useAuth } from "../context/AuthContext";
 import { Ionicons } from '@expo/vector-icons';
@@ -91,7 +92,7 @@ const AnalyticsScreen = ({ navigation }) => {
           let totalDetections = 0;
           const healthCounts = {};
           const insectCounts = {};
-          const rawTableData = []; // Store raw data for Excel/CSV/PDF
+          const rawTableData = []; 
 
           querySnapshot.forEach((doc) => {
             totalDetections++;
@@ -106,7 +107,7 @@ const AnalyticsScreen = ({ navigation }) => {
               insectCounts[name] = (insectCounts[name] || 0) + 1;
             }
 
-            // --- NEW: ANOMALY CLASSIFICATION FOR EXPORTS ---
+            // --- ANOMALY CLASSIFICATION FOR EXPORTS ---
             const isGood = name.toLowerCase().includes('beneficial') || name.toLowerCase().includes('healthy');
             const isAnomaly = name.toLowerCase().includes('unidentified');
             const exportStatus = isAnomaly ? 'Anomaly' : (isGood ? 'Good' : 'Warning');
@@ -131,7 +132,7 @@ const AnalyticsScreen = ({ navigation }) => {
           const healthScore = totalCrops === 0 ? 100 : Math.round((totalHealthy / totalCrops) * 100);
 
           setOverviewData({ detections: totalDetections, fields: 1, healthScore: healthScore });
-          setReportData(rawTableData); // Save to state for instant exports
+          setReportData(rawTableData); 
 
           setCropHealthChartData([
             { label: "Healthy", value: totalHealthy, color: "#2ecc71" },
@@ -172,9 +173,8 @@ const AnalyticsScreen = ({ navigation }) => {
       'Infected Aphid': "#9b59b6",
       'Infected Flea Beetle': "#e67e22",
       'Infected Pumpkin Beetle': "#1abc9c",
-      // --- NEW PIE CHART COLORS FOR ANOMALIES ---
-      'Unidentified Insect': "#34495E", // Dark Slate Blue
-      'Unidentified Crop': "#7F8C8D",   // Slate Gray
+      'Unidentified Insect': "#34495E", 
+      'Unidentified Crop': "#7F8C8D",  
     };
     return map[label] || "#94A3B8";
   };
@@ -225,7 +225,7 @@ const AnalyticsScreen = ({ navigation }) => {
   );
 
   // ==========================================
-  // EXPORT LOGIC ENGINE
+  // EXPORT LOGIC ENGINE (FIXED ENCODING)
   // ==========================================
 
   const exportToCSV = async () => {
@@ -235,6 +235,8 @@ const AnalyticsScreen = ({ navigation }) => {
       const header = "Date,Time,Detection,Confidence,Status\n";
       const rows = reportData.map(row => `${row.date},${row.time},${row.detection},${row.confidence},${row.status}`).join('\n');
       const fileUri = `${FileSystem.documentDirectory}OrganicEye_Data_${selectedPeriod}.csv`;
+      
+      // FIXED: Using FileSystem.EncodingType for perfect cross-platform support
       await FileSystem.writeAsStringAsync(fileUri, header + rows, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { dialogTitle: 'Export CSV Data' });
     } catch (error) { Alert.alert("Export Error", error.message); }
@@ -250,6 +252,8 @@ const AnalyticsScreen = ({ navigation }) => {
       XLSX.utils.book_append_sheet(wb, ws, "Detections");
       const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       const fileUri = `${FileSystem.documentDirectory}OrganicEye_Data_${selectedPeriod}.xlsx`;
+      
+      // FIXED: Using FileSystem.EncodingType for perfect cross-platform support
       await FileSystem.writeAsStringAsync(fileUri, wbout, { encoding: FileSystem.EncodingType.Base64 });
       await Sharing.shareAsync(fileUri, { dialogTitle: 'Export Excel Data' });
     } catch (error) { Alert.alert("Export Error", error.message); }
@@ -263,11 +267,11 @@ const AnalyticsScreen = ({ navigation }) => {
       // 1. Capture the visual charts as a Base64 image
       const chartBase64 = await reportRef.current.capture({ result: "base64" });
 
-      // 2. Generate Data Table (Updated to color-code Anomalies)
+      // 2. Generate Data Table
       const tableRows = reportData.map(item => {
         let statusColor = '#e74c3c'; // Warning red
         if (item.status === 'Good') statusColor = '#2ecc71';
-        if (item.status === 'Anomaly') statusColor = '#34495E'; // Slate gray for Anomaly
+        if (item.status === 'Anomaly') statusColor = '#34495E'; 
         
         return `
           <tr>

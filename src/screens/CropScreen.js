@@ -10,7 +10,7 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
-import { processDetectionAlert } from '../services/NotificationService';
+// NOTE: NotificationService import removed to stop local duplicate alerts
 
 const CropScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -20,7 +20,6 @@ const CropScreen = ({ navigation }) => {
   const [selectedItems, setSelectedItems] = useState([]); 
   const { user } = useAuth(); 
   const [pairedPiId, setPairedPiId] = useState(null); 
-  const [processedDetections, setProcessedDetections] = useState(new Set()); 
 
   useEffect(() => {
     if (!user) {
@@ -31,19 +30,12 @@ const CropScreen = ({ navigation }) => {
     let unsubscribeUser = () => {};
     let unsubscribeDetections = () => {};
 
-    // 1. Listen to the USER document for the pairedPiId and Settings
+    // 1. Listen to the USER document for the pairedPiId
     const userDocRef = doc(db, "users", user.uid);
     
     unsubscribeUser = onSnapshot(userDocRef, (userDocSnap) => {
       const userData = userDocSnap.data();
       const piId = userData?.pairedPiId;
-      
-      // --- GRAB THE USER'S CUSTOM ALERT SETTINGS ---
-      const alertSettings = userData?.alertSettings || {
-        immediateAlerts: true,
-        cropAlerts: true,
-        pushNotifications: true
-      };
 
       if (piId) {
         setPairedPiId(piId);
@@ -77,33 +69,6 @@ const CropScreen = ({ navigation }) => {
           });
           setItems(detectionsData); 
           setLoading(false);
-
-          // --- SYSTEM FUNCTIONAL NOTIFICATION LOGIC ---
-          querySnapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const docId = change.doc.id;
-              if (!processedDetections.has(docId)) {
-                setProcessedDetections(prev => new Set([...prev, docId]));
-                const data = change.doc.data();
-                
-                // ONLY trigger the alert if user settings permit it
-                if (!data.hiddenFromMain && 
-                    alertSettings.immediateAlerts && 
-                    alertSettings.cropAlerts && 
-                    alertSettings.pushNotifications) {
-                    
-                  processDetectionAlert({
-                    type: 'crop',
-                    detection: data.detection || data.primary || "Crop Scan",
-                    confidence: data.score || 0,
-                  }, user.uid);
-                } else {
-                  console.log("🔕 Crop alert suppressed due to user threshold settings.");
-                }
-              }
-            }
-          });
-
         }, (error) => {
           console.error("🔥 Crop Query Error:", error);
           setLoading(false);

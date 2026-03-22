@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import UserService from '../services/UserService';
 import { db } from '../../firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +28,15 @@ const THRESHOLD_TYPES = {
     min: 0,
     max: 100,
     description: 'Confidence threshold for medium-risk detections'
+  },
+  // THE FIX: Added the missing Low Risk configuration so it can be edited!
+  lowRisk: {
+    key: 'minConfidence',
+    label: 'Low Risk',
+    unit: '%',
+    min: 0,
+    max: 100,
+    description: 'Minimum confidence for low-risk detections'
   }
 };
 
@@ -147,10 +155,11 @@ const AlertThresholdsScreen = ({ navigation }) => {
           onPress: async () => {
             setSaving(true);
             try {
+              // THE FIX: Bypassed UserService to use bulletproof native setDoc
               // 1. Save to User Profile for mobile app logic
-              await UserService.updateUserData(user.uid, {
+              await setDoc(doc(db, 'users', user.uid), {
                 alertSettings: settings
-              });
+              }, { merge: true });
 
               // 2. Push to IoT Device via Firebase Digital Twin
               if (pairedPiId) {
@@ -182,7 +191,7 @@ const AlertThresholdsScreen = ({ navigation }) => {
               ]);
             } catch (error) {
               console.error('Error saving alert settings:', error);
-              Alert.alert('Error', 'Failed to save alert settings');
+              Alert.alert('Error', 'Failed to save alert settings. Check console.');
             } finally {
               setSaving(false);
             }
@@ -397,7 +406,14 @@ const AlertThresholdsScreen = ({ navigation }) => {
             <View style={styles.settingInfo}>
               <Text style={[styles.settingTitle, { color: colors.text }]}>Low Risk Alerts</Text>
               <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                Alert for low-risk detections
+                Alert for low-risk detections (
+                <Text
+                  style={[styles.thresholdValue, { color: colors.primary }]}
+                  onPress={() => openThresholdEditor(THRESHOLD_TYPES.lowRisk, settings.minConfidence)}
+                >
+                  ≥{settings.minConfidence}%
+                </Text>
+                {' '}confidence)
               </Text>
             </View>
             <Switch

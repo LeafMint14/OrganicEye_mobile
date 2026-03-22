@@ -10,7 +10,7 @@ import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from '
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
-import { processDetectionAlert } from '../services/NotificationService';
+// NOTE: NotificationService import removed to stop local duplicate alerts
 
 const InsectScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -20,7 +20,6 @@ const InsectScreen = ({ navigation }) => {
   const [selectedItems, setSelectedItems] = useState([]); 
   const { user } = useAuth(); 
   const [pairedPiId, setPairedPiId] = useState(null);
-  const [processedDetections, setProcessedDetections] = useState(new Set()); 
 
   useEffect(() => {
     if (!user) {
@@ -31,18 +30,11 @@ const InsectScreen = ({ navigation }) => {
     let unsubscribeUser = () => {};
     let unsubscribeDetections = () => {};
 
-    // 1. Listen for Pairing & Settings (Real-time)
+    // 1. Listen for Pairing (Real-time)
     const userDocRef = doc(db, "users", user.uid);
     unsubscribeUser = onSnapshot(userDocRef, (userDocSnap) => {
       const userData = userDocSnap.data();
       const piId = userData?.pairedPiId;
-      
-      // --- GRAB THE USER'S CUSTOM ALERT SETTINGS ---
-      const alertSettings = userData?.alertSettings || {
-        immediateAlerts: true,
-        insectAlerts: true,
-        pushNotifications: true
-      };
 
       if (piId) {
         setPairedPiId(piId);
@@ -74,32 +66,6 @@ const InsectScreen = ({ navigation }) => {
           });
           setItems(detectionsData); 
           setLoading(false);
-
-          // --- SYSTEM FUNCTIONAL NOTIFICATION LOGIC ---
-          querySnapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const docId = change.doc.id;
-              if (!processedDetections.has(docId)) {
-                setProcessedDetections(prev => new Set([...prev, docId]));
-                const data = change.doc.data();
-                
-                // ONLY trigger the alert if user settings permit it
-                if (!data.hiddenFromMain && 
-                    alertSettings.immediateAlerts && 
-                    alertSettings.insectAlerts && 
-                    alertSettings.pushNotifications) {
-                    
-                  processDetectionAlert({
-                    type: 'insect',
-                    detection: data.detection || data.primary || "Unknown Insect",
-                    confidence: data.score || Math.round(data.confidence * 100) || 0,
-                  }, user.uid);
-                } else {
-                  console.log("🔕 Insect alert suppressed due to user threshold settings.");
-                }
-              }
-            }
-          });
         }, (error) => {
           console.error("🔥 Query Error:", error);
           setLoading(false);
