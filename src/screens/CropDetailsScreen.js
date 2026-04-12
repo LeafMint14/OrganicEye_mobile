@@ -253,6 +253,12 @@ const CropDetailsScreen = ({ route, navigation }) => {
             <Text style={styles.legalNotice}>
               *Apply treatments according to Integrated Pest Management (IPM) safety standards. 
             </Text>
+
+            {/* NEW DISCLAIMER TEXT ADDED HERE */}
+            <Text style={styles.disclaimerText}>
+              Disclaimer: ORGANIC-EYE claims no ownership of this information. It is curated from expert agricultural advice and public internet sources.
+            </Text>
+
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -360,6 +366,9 @@ const styles = StyleSheet.create({
   videoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 12 },
   videoBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 10, fontSize: 12 },
   legalNotice: { fontSize: 10, color: '#94A3B8', marginTop: 15, textAlign: 'center' },
+  
+  // NEW DISCLAIMER STYLE ADDED HERE
+  disclaimerText: { fontSize: 10, color: '#808080', marginTop: 10, textAlign: 'center', fontStyle: 'italic' },
   
   webHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
   webCloseBtn: { flexDirection: 'row', alignItems: 'center' },
