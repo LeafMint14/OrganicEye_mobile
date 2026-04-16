@@ -1,18 +1,18 @@
-// src/config/LabelMap.js
 
-// --- CROP LABELS ---
-// Ensure these match the exact strings sent by the Python script analysis_basis
+
+
+
 export const CROP_LABELS = [
   'Healthy',
   'Insect Bite', 
-  'Leaf Perforation', // NEW: Added for hit-and-run pest damage
+  'Leaf Perforation', 
   'Spotting',
   'Wilting',
   'Yellowing',
-  'Unidentified Crop', // NEW: Added for unknown plants/weeds
+  'Unidentified Crop', 
 ];
 
-// --- INSECT LABELS ---
+
 export const INSECT_LABELS = [
   'Beneficial Bee',
   'Beneficial Lacewing Larvae',
@@ -22,12 +22,12 @@ export const INSECT_LABELS = [
   'Infected Aphid',
   'Infected Flea Beetle',
   'Infected Pumpkin Beetle',
-  'Unidentified Insect', // NEW: Added for unknown bugs
+  'Unidentified Insect', 
 ];
 
-// --- getCropInsight ---
+
 export const getCropInsight = (label) => {
-  // Normalize the label so casing (e.g., "Insect bite" vs "Insect Bite") doesn't break the app
+  
   const normalizedLabel = label?.toLowerCase()?.trim() || "";
 
   if (normalizedLabel.includes('healthy')) {
@@ -52,7 +52,7 @@ export const getCropInsight = (label) => {
     };
   }
 
-  // NEW: Logic for holes with NO visible insect
+  
   if (normalizedLabel.includes('leaf perforation')) {
     return {
       title: 'Foliar Perforation (Hit & Run) 🌿',
@@ -97,7 +97,7 @@ export const getCropInsight = (label) => {
     };
   }
 
-  // NEW: Logic for Unidentified Crop Anomaly
+  
   if (normalizedLabel.includes('unidentified crop')) {
     return {
       title: 'Unidentified Vegetation 🌱',
@@ -109,22 +109,22 @@ export const getCropInsight = (label) => {
     };
   }
 
-  // Fallback if the AI detects something completely unknown
+  
   return {
     title: 'Monitoring Growth',
     description: 'Continuing to monitor the health of your crops.',
     medicalDetail: 'Analyzing systemic leaf patterns.',
     treatmentSteps: 'Continue standard care and monitor for changes.',
     source: '',
-    youtubeId: null // Button hides safely
+    youtubeId: null 
   };
 };
 
-// --- getInsectInsight ---
+
 export const getInsectInsight = (label) => {
   const normalizedLabel = label?.toLowerCase() || "";
 
-  // 🐛 --- PEST CHECKS FIRST ---
+  
   if (normalizedLabel.includes('flea beetle')) {
     return {
       title: 'Pest: Flea Beetle 🦗',
@@ -152,7 +152,7 @@ export const getInsectInsight = (label) => {
     };
   }
 
-  // 🐝 --- BENEFICIAL CHECKS NEXT ---
+  
   if (normalizedLabel.includes('beneficial bee') || (normalizedLabel.includes('bee') && !normalizedLabel.includes('beetle'))) {
     return {
       title: 'Beneficial: Pollinator Bee 🐝',
@@ -180,7 +180,7 @@ export const getInsectInsight = (label) => {
     };
   }
 
-  // ❓ --- UNKNOWN CHECK ---
+  
   if (normalizedLabel.includes('unidentified insect')) {
     return {
       title: 'Unidentified Arthropod 🪲',
@@ -190,7 +190,7 @@ export const getInsectInsight = (label) => {
     };
   }
 
-  // --- FALLBACK ---
+  
   return {
     title: 'Insect Detected',
     description: `A ${label} was detected. Watch for signs of leaf damage or beneficial behavior.`,

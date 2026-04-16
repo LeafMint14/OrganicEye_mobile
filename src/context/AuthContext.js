@@ -19,9 +19,9 @@ export const AuthProvider = ({ children }) => {
     return await AuthService.register(email, password, First_Name, Last_Name, contact);
   };
 
-  // --- UPDATED LOGIN (Removed logs) ---
+  
   const login = async (email, password) => {
-    // We just return the result; the LoginScreen will handle showing the Alert
+    
     return await AuthService.login(email, password);
   };
 
@@ -38,9 +38,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Removed setup log
+    
     const unsubscribe = AuthService.onAuthStateChange((user) => {
-      // Removed "Auth state changed" log to keep console clean
+      
       setUser(user);
       setLoading(false);
     });

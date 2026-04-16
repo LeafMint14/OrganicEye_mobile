@@ -11,7 +11,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { showDetectionAlert } from '../services/NotificationService';
 
-// Threshold types configuration
+
 const THRESHOLD_TYPES = {
   highRisk: {
     key: 'highRiskThreshold',
@@ -29,7 +29,7 @@ const THRESHOLD_TYPES = {
     max: 100,
     description: 'Confidence threshold for medium-risk detections'
   },
-  // THE FIX: Added the missing Low Risk configuration so it can be edited!
+  
   lowRisk: {
     key: 'minConfidence',
     label: 'Low Risk',
@@ -48,15 +48,15 @@ const AlertThresholdsScreen = ({ navigation }) => {
   const [originalSettings, setOriginalSettings] = useState(null);
   const [pairedPiId, setPairedPiId] = useState(null); 
 
-  // Modal states for threshold editing
+  
   const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
   const [editingThreshold, setEditingThreshold] = useState(null);
   const [tempThresholdValue, setTempThresholdValue] = useState('');
 
-  // Validation states
+  
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Core IoT Alert threshold settings
+  
   const [settings, setSettings] = useState({
     highRiskEnabled: true,
     mediumRiskEnabled: true,
@@ -135,7 +135,7 @@ const AlertThresholdsScreen = ({ navigation }) => {
     }
   };
 
-  // --- REAL SYSTEM FUNCTIONALITY FOR IOT SYNC ---
+  
   const saveAlertSettings = async (shouldNavigateBack = false) => {
     if (!user?.uid) return;
 
@@ -155,13 +155,13 @@ const AlertThresholdsScreen = ({ navigation }) => {
           onPress: async () => {
             setSaving(true);
             try {
-              // THE FIX: Bypassed UserService to use bulletproof native setDoc
-              // 1. Save to User Profile for mobile app logic
+              
+              
               await setDoc(doc(db, 'users', user.uid), {
                 alertSettings: settings
               }, { merge: true });
 
-              // 2. Push to IoT Device via Firebase Digital Twin
+              
               if (pairedPiId) {
                 await setDoc(doc(db, 'device_settings', pairedPiId), {
                   alertSettings: {
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
   settingTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   settingSubtitle: { fontSize: 14, lineHeight: 18 },
   
-  // --- REDESIGNED SAVE BUTTON STYLES ---
+  
   saveSection: { 
     paddingHorizontal: 20, 
     paddingTop: 15,
@@ -629,11 +629,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2D6A4F', // Darker, richer green
-    borderRadius: 30, // Modern pill shape
+    backgroundColor: '#2D6A4F', 
+    borderRadius: 30, 
     paddingVertical: 16,
-    elevation: 6, // Stronger shadow for Android
-    shadowColor: '#1B4332', // Colored drop shadow for iOS
+    elevation: 6, 
+    shadowColor: '#1B4332', 
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 6,

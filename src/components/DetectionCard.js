@@ -2,25 +2,25 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { format } from 'date-fns';
-import { Ionicons } from '@expo/vector-icons'; // Import icons
+import { Ionicons } from '@expo/vector-icons'; 
 
 const DetectionCard = ({ item, onPress, onLongPress, isSelected }) => {
   const { colors } = useTheme();
 
-  // Format the timestamp
+  
   const date = item.timestamp ? item.timestamp.toDate() : new Date();
   const formattedDate = format(date, 'MMM dd, yyyy');
   const formattedTime = format(date, 'h:mm a');
 
   return (
-    // Add onLongPress and style changes here
+    
     <TouchableOpacity 
       onPress={onPress} 
       onLongPress={onLongPress} 
       style={[
         styles.card,
         { backgroundColor: colors.card },
-        // Add a highlight border if selected
+        
         isSelected && { borderColor: colors.primary, borderWidth: 2.5 }
       ]}
     >
@@ -36,7 +36,7 @@ const DetectionCard = ({ item, onPress, onLongPress, isSelected }) => {
         </Text>
       </View>
 
-      {/* Show a checkmark if selected */}
+      
       {isSelected && (
         <View style={[styles.checkmark, { backgroundColor: colors.primary }]}>
           <Ionicons name="checkmark" size={18} color="#fff" />

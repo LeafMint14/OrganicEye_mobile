@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
-// Import screens
+
 import SplashScreen from '../screens/SplashScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -25,14 +25,14 @@ import DetectionSettingsScreen from '../screens/DetectionSettingsScreen';
 import RegisterIoTScreen from '../screens/RegisterIoTScreen';
 import AlertThresholdsScreen from '../screens/AlertThresholdsScreen';
 
-// --- NEW MODULE IMPORTS ---
+
 import DeviceListScreen from '../screens/DeviceListScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Bottom Tab Navigator for main app screens
+
 function MainTabNavigator() {
   return (
     <Tab.Navigator
@@ -99,7 +99,7 @@ function MainTabNavigator() {
   );
 }
 
-// Main App Navigator
+
 export default function AppNavigator() {
   const { user, loading } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
@@ -107,10 +107,10 @@ export default function AppNavigator() {
   console.log('AppNavigator: Current user:', user ? user.email : 'null');
   console.log('AppNavigator: Auth Loading:', loading);
 
-  // This effect ensures the splash screen shows for at least a minimum amount of time
-  // even if the Firebase auth check is incredibly fast, allowing the animation to play.
+  
+  
   useEffect(() => {
-    // We set a 2.5-second timer to give the SplashScreen animation time to finish.
+    
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 2500);
@@ -118,13 +118,13 @@ export default function AppNavigator() {
     return () => clearTimeout(timer);
   }, []);
 
-  // --- 1. SHOW SPLASH SCREEN FIRST ---
-  // If the timer is still running, OR Firebase is still checking auth, show the Splash Screen.
+  
+  
   if (showSplash || loading) {
     return <SplashScreen />;
   }
 
-  // --- 2. SHOW MAIN APP OR AUTH SCREENS ---
+  
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -134,7 +134,7 @@ export default function AppNavigator() {
         }}
       >
         {user ? (
-          // currentUser is signed in - show main app
+          
           <>
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="InsectDetails" component={InsectDetailsScreen} />
@@ -152,7 +152,7 @@ export default function AppNavigator() {
             <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
           </>
         ) : (
-          // currentUser is not signed in - show auth screens
+          
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />

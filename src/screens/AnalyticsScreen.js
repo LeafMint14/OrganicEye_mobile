@@ -20,10 +20,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ==========================================
-// --- 1. RESTORED STABLE IMAGE LIBRARY ---
-// Uses public, stable images guaranteed to load instantly.
-// ==========================================
+
+
+
+
 const getReferenceImage = (classification) => {
   const images = {
     'Wilting': 'https://images.unsplash.com/photo-1635048424263-2396e952672d?w=200&q=80', 
@@ -32,7 +32,7 @@ const getReferenceImage = (classification) => {
     'Infected Flea Beetle': 'https://images.unsplash.com/photo-1550596334-7bb40a71b6bc?w=200&q=80',
     'Healthy': 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=200&q=80',
   };
-  return images[classification] || 'https://images.unsplash.com/photo-1591857177580-dc82b9ac4e1e?w=200&q=80'; // Default Leaf
+  return images[classification] || 'https://images.unsplash.com/photo-1591857177580-dc82b9ac4e1e?w=200&q=80';
 };
 
 const AnalyticsScreen = ({ navigation }) => {
@@ -43,7 +43,7 @@ const AnalyticsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   
-  // Dates & Periods
+  
   const periods = ["day", "week", "month", "year"];
   const [selectedPeriod, setSelectedPeriod] = useState("week"); 
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 7))); 
@@ -51,13 +51,13 @@ const AnalyticsScreen = ({ navigation }) => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
-  // Data
+  
   const [overviewData, setOverviewData] = useState({ detections: 0, fields: 0, healthScore: 0 });
   const [cropHealthChartData, setCropHealthChartData] = useState([]);
   const [insectChartData, setInsectChartData] = useState([]);
   const [healthTrendData, setHealthTrendData] = useState([]); 
   
-  // Specific Anomaly Tracking
+  
   const [dailyIssueData, setDailyIssueData] = useState([]); 
   const [availableIssues, setAvailableIssues] = useState([]); 
   const [selectedIssue, setSelectedIssue] = useState(null); 
@@ -286,9 +286,9 @@ const AnalyticsScreen = ({ navigation }) => {
     );
   };
 
-  // ==========================================
-  // EXPORT ENGINE (Fully Functional & Upgraded)
-  // ==========================================
+  
+  
+  
 
   const getComparativeSummary = () => {
     if (!selectedIssue || dailyIssueData.length === 0) return null;
