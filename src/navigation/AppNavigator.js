@@ -25,6 +25,10 @@ import DetectionSettingsScreen from '../screens/DetectionSettingsScreen';
 import RegisterIoTScreen from '../screens/RegisterIoTScreen';
 import AlertThresholdsScreen from '../screens/AlertThresholdsScreen';
 
+// --- NEW MODULE IMPORTS ---
+import DeviceListScreen from '../screens/DeviceListScreen';
+import DeviceDetailScreen from '../screens/DeviceDetailScreen';
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -142,6 +146,10 @@ export default function AppNavigator() {
             <Stack.Screen name="DetectionSettings" component={DetectionSettingsScreen} />
             <Stack.Screen name="AlertThresholds" component={AlertThresholdsScreen} />
             <Stack.Screen name="RegisterIoT" component={RegisterIoTScreen} />
+            
+            {/* --- NEW MODULE SCREENS REGISTERED HERE --- */}
+            <Stack.Screen name="DeviceList" component={DeviceListScreen} />
+            <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
           </>
         ) : (
           // currentUser is not signed in - show auth screens

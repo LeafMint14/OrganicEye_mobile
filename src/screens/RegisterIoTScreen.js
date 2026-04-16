@@ -6,6 +6,10 @@ import { useAuth } from '../context/AuthContext';
 import UserService from '../services/UserService';
 import { Ionicons } from '@expo/vector-icons';
 
+// --- NEW: Import Firestore tools ---
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../firebase'; // NOTE: Verify this path matches where your Firebase 'db' is exported!
+
 const RegisterIoTScreen = ({ navigation }) => {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -14,12 +18,10 @@ const RegisterIoTScreen = ({ navigation }) => {
 
   const [permission, requestPermission] = useCameraPermissions();
 
-  // --- NEW: SAFE NAVIGATION FALLBACK ---
   const handleGoBack = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      // If history is empty due to an app reload, force it back to Settings
       navigation.navigate('Settings'); 
     }
   };
@@ -31,6 +33,15 @@ const RegisterIoTScreen = ({ navigation }) => {
     console.log(`Scanned QR code! Type: ${type} Data: ${data}`);
 
     try {
+      // --- THE FIX: 1. Register the device in the 'devices' collection ---
+      const newDeviceRef = doc(db, 'devices', data); 
+      await setDoc(newDeviceRef, {
+        name: `Organic Eye Unit (${data})`,
+        status: 'Offline'
+        // merge: true ensures we don't accidentally delete data if the device already exists
+      }, { merge: true });
+
+      // 2. Link it to the user's profile (Your original code)
       const result = await UserService.updateUserData(user.uid, {
         pairedPiId: data 
       });
@@ -39,7 +50,7 @@ const RegisterIoTScreen = ({ navigation }) => {
         Alert.alert(
           'Success!',
           `You have successfully paired with device: ${data}`,
-          [{ text: 'OK', onPress: handleGoBack }] // <-- Updated
+          [{ text: 'OK', onPress: handleGoBack }] 
         );
       } else {
         throw new Error(result.error);
@@ -84,7 +95,7 @@ const RegisterIoTScreen = ({ navigation }) => {
 
         <TouchableOpacity 
           style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.muted }]} 
-          onPress={handleGoBack} // <-- Updated
+          onPress={handleGoBack} 
         >
           <Text style={[styles.buttonText, { color: colors.text }]}>Go Back</Text>
         </TouchableOpacity>
@@ -105,7 +116,7 @@ const RegisterIoTScreen = ({ navigation }) => {
       <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
         <TouchableOpacity 
           style={styles.backButton} 
-          onPress={handleGoBack} // <-- Updated
+          onPress={handleGoBack} 
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -130,69 +141,34 @@ const RegisterIoTScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 50, 
-    paddingBottom: 15,
-    paddingHorizontal: 15,
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center',
+    paddingTop: 50, paddingBottom: 15, paddingHorizontal: 15,
   },
-  backButton: {
-    padding: 8,
-    marginRight: 10,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  backButton: { padding: 8, marginRight: 10 },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scannerFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderRadius: 12,
+    width: 250, height: 250,
+    borderWidth: 2, borderColor: '#fff', borderRadius: 12,
     backgroundColor: 'transparent',
   },
   scannerText: {
-    marginTop: 20,
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    maxWidth: '70%',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 10,
-    borderRadius: 8,
+    marginTop: 20, color: '#fff', fontSize: 16, textAlign: 'center',
+    maxWidth: '70%', backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 10, borderRadius: 8,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
   button: {
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginHorizontal: 40,
+    padding: 15, borderRadius: 10, alignItems: 'center', marginHorizontal: 40,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default RegisterIoTScreen;

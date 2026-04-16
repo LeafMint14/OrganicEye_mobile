@@ -20,7 +20,6 @@ const SettingsScreen = ({ navigation }) => {
       if (user?.uid) {
         try {
           console.log('Fetching data for UID:', user.uid);
-          // Set loading to true ONLY if userData is not already loaded
           if (!userData) {
              setLoading(true);
           }
@@ -46,14 +45,11 @@ const SettingsScreen = ({ navigation }) => {
       }
     };
     
-    // Add a listener that re-runs fetchUserData() every time this screen
-    // comes into focus (e.g., when you navigate back from ProfileEdit)
     const unsubscribe = navigation.addListener('focus', () => {
       console.log('SettingsScreen FOCUSED, re-fetching data...');
       fetchUserData();
     });
 
-    // Return the unsubscribe function to clean up the listener
     return unsubscribe;
     
   }, [user, navigation, userData]);
@@ -65,7 +61,6 @@ const SettingsScreen = ({ navigation }) => {
     email: user?.email || 'email@example.com',
     contact: userData?.contact || 'Not provided',
     role: userData?.role || 'Farmer',
-    // This now dynamically uses the avatarUrl from the database
     avatar: userData?.avatarUrl 
       ? { uri: userData.avatarUrl } 
       : require('../../assets/logo.png'),
@@ -84,6 +79,8 @@ const SettingsScreen = ({ navigation }) => {
       title: 'Detection',
       items: [
         { name: 'Register IoT Device', icon: 'qr-code-outline', action: 'registerIoT' },
+        // --- NEW MODULE OPTION ADDED HERE ---
+        { name: 'Device Management', icon: 'hardware-chip-outline', action: 'deviceManagement' },
         { name: 'Detection Settings', icon: 'camera-outline', action: 'detection' },
         { name: 'Alert Thresholds', icon: 'notifications-outline', action: 'alerts' },
         { name: 'Detection History', icon: 'time-outline', action: 'history' },
@@ -99,7 +96,6 @@ const SettingsScreen = ({ navigation }) => {
     }
   ];
 
-  // Filter settings based on search query
   const filteredSettingsOptions = settingsOptions.map(section => ({
     ...section,
     items: section.items.filter(item => 
@@ -110,8 +106,12 @@ const SettingsScreen = ({ navigation }) => {
   const handleSettingAction = async (action) => {
     switch (action) {
       case 'registerIoT':
-      navigation.navigate('RegisterIoT'); // Make sure this matches your navigator's screen name
-      break;
+        navigation.navigate('RegisterIoT');
+        break;
+      // --- ROUTING FOR NEW MODULE ---
+      case 'deviceManagement':
+        navigation.navigate('DeviceList');
+        break;
       case 'profile':
         navigation.navigate('ProfileEdit');
         break;
@@ -380,7 +380,7 @@ const SettingsScreen = ({ navigation }) => {
           style: 'destructive', 
           onPress: async () => {
             try {
-              const result = await logout(); // This calls AuthService.logout()
+              const result = await logout();
               
               if (result.success) {
                 console.log('Logout successful');
@@ -419,7 +419,6 @@ const SettingsScreen = ({ navigation }) => {
       resizeMode="cover"
     >
       <ScrollView style={styles.container}>
-        {/* Profile header */}
         <View style={styles.profileHeader}>
           <Image source={profile.avatar} style={styles.avatar} />
           <View style={styles.profileInfo}>
@@ -439,7 +438,6 @@ const SettingsScreen = ({ navigation }) => {
         </TouchableOpacity>
         </View>
 
-        {/* Search Bar */}
         {showSearch && (
           <View style={styles.searchSection}>
             <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
@@ -459,7 +457,6 @@ const SettingsScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Add user details section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Details</Text>
@@ -587,7 +584,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#e8f5e9',
- },
+  },
   roleBadge: {
     marginTop: 6,
     flexDirection: 'row',
